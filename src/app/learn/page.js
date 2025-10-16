@@ -20,10 +20,10 @@ export default function LearnPage() {
         <main>
           <section
             id="overview"
-            className="relative overflow-hidden"
+            className="relative overflow-hidden learn-hero"
             style={{ backgroundColor: '#14C262' }}
           >
-            <div className="max-w-6xl mx-auto px-4 pt-24 pb-48 text-center">
+            <div className="max-w-6xl mx-auto px-4 pt-24 pb-48 text-center learn-hero-content">
               <div
                 className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full mb-6"
                 style={{ background: 'rgba(255, 255, 255, 0.18)' }}
@@ -94,11 +94,11 @@ export default function LearnPage() {
             </div>
           </section>
 
-          <section id="roadmap" className="relative" style={{ backgroundColor: 'var(--surface-white)' }}>
-            <div className="w-full pb-4">
-              <div className="relative" style={{ marginTop: 'clamp(16px, 6vw, 120px)' }}>
+          <section id="roadmap" className="relative learn-roadmap-shell" style={{ backgroundColor: 'var(--surface-white)' }}>
+            <div className="w-full pb-4 learn-roadmap-diagram">
+              <div className="relative learn-roadmap-title-wrapper" style={{ marginTop: 'clamp(16px, 6vw, 120px)' }}>
                 <div
-                  className="absolute left-1/2 -translate-x-1/2 text-center text-shadow-lg/20"
+                  className="absolute left-1/2 -translate-x-1/2 text-center text-shadow-lg/20 learn-roadmap-title"
                   style={{ top: 'clamp(-400px, -18vw, -140px)', alignContent: 'center' }}
                 >
                   <span

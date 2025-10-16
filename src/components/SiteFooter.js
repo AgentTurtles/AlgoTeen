@@ -90,7 +90,7 @@ export default function SiteFooter() {
           className="text-center w-full"
           style={{
             fontFamily: '"Ruigslay"',
-            fontSize: 'clamp(170px, 20vw, 320px)',
+            fontSize: 'clamp(72px, 18vw, 320px)',
             fontWeight: 400,
             letterSpacing: '-5.12px',
             opacity: 1,

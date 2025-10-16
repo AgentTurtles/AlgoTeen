@@ -467,16 +467,23 @@ export default function GlobalStyles() {
         .strategy-visual {
           position: relative;
           width: 100%;
-          max-width: clamp(560px, 50vw, 780px);
+          max-width: clamp(320px, 70vw, 780px);
           margin: 0 auto;
         }
 
         .strategy-visual-image {
           width: 100%;
           height: auto;
-          transform: scale(1.5);
-          padding-top: 80px;
-          padding-right: 24px;
+          transform: none;
+          padding: 0;
+        }
+
+        @media (min-width: 1024px) {
+          .strategy-visual-image {
+            transform: scale(1.25);
+            padding-top: 60px;
+            padding-right: 24px;
+          }
         }
 
         .strategy-visual-shell {
@@ -594,6 +601,194 @@ export default function GlobalStyles() {
 
         @media (min-width: 768px) {
           .container-shell { padding: 0 2rem; }
+        }
+
+        .hero-shell { position: relative; }
+        .hero-layout { position: relative; }
+
+        @media (max-width: 1023px) {
+          .hero-inner { padding: 3.5rem 1.5rem !important; }
+          .hero-layout {
+            min-height: auto !important;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            gap: 2.5rem;
+          }
+          .hero-copy {
+            position: static !important;
+            right: auto !important;
+            top: auto !important;
+            width: 100%;
+            max-width: 520px;
+            margin: 0 auto;
+            text-align: center !important;
+          }
+          .hero-title {
+            font-size: clamp(40px, 11.5vw, 58px) !important;
+            line-height: 1.08 !important;
+            letter-spacing: -1.6px !important;
+          }
+          .hero-subtitle {
+            font-size: clamp(16px, 5vw, 20px) !important;
+            line-height: 1.55 !important;
+            letter-spacing: -0.8px !important;
+            max-width: 480px;
+          }
+          .hero-copy > * {
+            text-align: center !important;
+          }
+          .hero-figure {
+            position: relative !important;
+            right: auto !important;
+            top: auto !important;
+            display: flex;
+            width: 100%;
+            justify-content: center;
+            margin-top: 0.5rem;
+          }
+          .hero-figure .hero-image {
+            width: min(100%, 320px) !important;
+            height: auto !important;
+            max-height: 340px;
+            object-position: center;
+          }
+          .hero-figure > div {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+          }
+          .hero-figure .text-white {
+            text-align: center !important;
+            margin-right: 0 !important;
+            margin-top: 0.75rem;
+          }
+          .hero-shell .cta-primary,
+          .hero-shell .cta-pill {
+            width: 100%;
+            max-width: 340px;
+            font-size: clamp(18px, 4.6vw, 20px) !important;
+            min-height: 52px;
+          }
+          .hero-cta-group {
+            width: 100%;
+            max-width: 360px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+
+          .learn-hero {
+            padding-top: 5rem;
+            padding-bottom: 4rem;
+          }
+          .learn-hero-content {
+            padding-top: 3.5rem !important;
+            padding-bottom: 3.5rem !important;
+          }
+          .learn-hero-content h1 {
+            font-size: clamp(64px, 22vw, 120px) !important;
+          }
+          .learn-hero-content p {
+            font-size: 1rem !important;
+            line-height: 1.6 !important;
+          }
+          .learn-hero-content .cta-primary,
+          .learn-hero-content .cta-pill {
+            width: 100%;
+            max-width: 260px;
+          }
+
+          .learn-roadmap-shell {
+            padding-top: 4rem;
+          }
+          .learn-roadmap-diagram {
+            overflow-x: auto;
+            padding-bottom: 1.5rem;
+          }
+          .learn-roadmap-diagram > * {
+            min-width: 760px;
+          }
+          .learn-roadmap-title {
+            position: static !important;
+            transform: none !important;
+            top: auto !important;
+            text-align: center !important;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+            padding: 0 1rem;
+          }
+          .learn-roadmap-title span {
+            font-size: clamp(48px, 18vw, 112px) !important;
+          }
+          .learn-roadmap-title p {
+            font-size: clamp(20px, 6vw, 28px) !important;
+            text-align: center !important;
+          }
+
+          .strategy-layout {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2.25rem;
+          }
+          .strategy-stack {
+            margin-top: 0 !important;
+            align-items: center;
+            text-align: center;
+          }
+          .strategy-stack h3 {
+            font-size: clamp(24px, 6.4vw, 30px) !important;
+            text-align: center;
+          }
+          .strategy-stack p {
+            font-size: clamp(15px, 4.3vw, 17px) !important;
+            max-width: 520px;
+          }
+          .strategy-grid {
+            margin-top: 0;
+            width: 100%;
+            max-width: 520px;
+            grid-template-columns: minmax(0, 1fr);
+          }
+          .strategy-card {
+            padding: 1.1rem 1.25rem;
+          }
+          .strategy-card h4 {
+            font-size: clamp(0.95rem, 4vw, 1.05rem) !important;
+          }
+          .strategy-card p {
+            font-size: clamp(0.85rem, 3.8vw, 0.95rem) !important;
+          }
+          .strategy-visual-shell {
+            margin-top: 1.5rem;
+            width: 100%;
+          }
+          .strategy-visual {
+            max-width: 520px;
+          }
+          .strategy-cta-wrap {
+            display: flex;
+            justify-content: center;
+          }
+          .strategy-cta-wrap .cta-pill {
+            width: 100%;
+            max-width: 340px;
+          }
+
+          .code-cta-group {
+            width: 100%;
+            max-width: 420px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          .code-cta-group .cta-primary,
+          .code-cta-group .cta-pill {
+            width: 100%;
+            min-height: 52px;
+            font-size: clamp(17px, 4.2vw, 18px) !important;
+          }
         }
 
         html { scroll-behavior: smooth; }

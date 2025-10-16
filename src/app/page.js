@@ -22,20 +22,20 @@ export default function Home() {
   <SiteHeader navItems={NAV_SECTIONS} searchItems={SITE_SEARCH_INDEX} />
 
       {/* Hero Section */}
-      <section id="home" className="relative overflow-hidden w-full animate-fade-in" style={{backgroundColor: '#14C262'}}>
-        <div className="relative w-full px-4 py-16">
-          <div className="relative w-full max-w-7xl mx-auto" style={{minHeight: '713px'}}>
+      <section id="home" className="relative overflow-hidden w-full animate-fade-in hero-shell" style={{backgroundColor: '#14C262'}}>
+        <div className="relative w-full px-4 py-16 hero-inner">
+          <div className="relative w-full max-w-7xl mx-auto hero-layout" style={{minHeight: '713px'}}>
             {/* Text Content - Left side with freedom to expand */}
-            <div className="relative right-20 top-32 z-10 w-190">
-              <div className="text-white font-medium mb-6"
+            <div className="relative right-20 top-32 z-10 w-190 hero-copy">
+              <div className="hero-title text-white font-medium mb-6"
                    style={{fontFamily: 'Bricolage Grotesque, -apple-system, Roboto, Helvetica, sans-serif', fontSize: '64px', lineHeight: 'normal', letterSpacing: '-2.88px', textShadow: '0 4px 4px rgba(0, 0, 0, 0.25)', textAlign: 'center'}}>
                 Master trading, one lesson at a time.
               </div>
-              <p className="text-white font-normal mb-8 w-190 mx-auto"
+              <p className="hero-subtitle text-white font-normal mb-8 w-190 mx-auto"
                  style={{fontFamily: 'Bricolage Grotesque, -apple-system, Roboto, Helvetica, sans-serif', fontSize: '24px', lineHeight: 'normal', letterSpacing: '-1.44px', textAlign: 'center', fontWeight: '400'}}>
                 Learn markets the safe way: code strategies, backtest with real data, and paper-trade. Roadmaps, challenges, and zero real money.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4 items-center justify-center mb-6">
+              <div className="hero-cta-group flex flex-col sm:flex-row gap-4 items-center justify-center mb-6">
                 <button className="cta-primary min-h-[52px] px-7" style={{fontSize: '20px', letterSpacing: '-0.4px'}}>
                   Sign Up
                 </button>
@@ -50,14 +50,14 @@ export default function Home() {
             </div>
 
             {/* Image - Right side with freedom to position */}
-            <div className="absolute z-10" style={{right: '-70px', top: '55px'}}>
+            <div className="absolute z-10 hero-figure" style={{right: '-70px', top: '55px'}}>
               <div className="relative">
                 <Image
                   src="/image1.png"
                   alt="Trading chart interface"
                   width={900}
                   height={720}
-                  className="rounded-3xl shadow-lg"
+                  className="rounded-3xl shadow-lg hero-image"
                   style={{
                     width: '610px',
                     height: '500px',
@@ -182,7 +182,7 @@ export default function Home() {
                       <p>Combine macro stories with earnings beats, valuation metrics, and long-horizon trade plans.</p>
                     </div>
                   </div>
-                  <div className="mt-8">
+                  <div className="mt-8 strategy-cta-wrap">
                     <button className="cta-pill" type="button">
                       View progression map
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -226,7 +226,7 @@ export default function Home() {
                      style={{fontFamily: 'Bricolage Grotesque, -apple-system, Roboto, Helvetica, sans-serif', letterSpacing: '-0.3px'}}>
                     Spin up algorithms in our browser editor, run historical tests, and track performance dashboards without leaving the safe practice environment.
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex flex-col sm:flex-row gap-4 code-cta-group">
                     <button className="cta-primary px-7" style={{fontSize: '18px', letterSpacing: '-0.4px'}}>
                       Launch Code Lab
                     </button>
