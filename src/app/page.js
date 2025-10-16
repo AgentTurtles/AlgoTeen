@@ -83,10 +83,10 @@ export default function Home() {
         <div className="mx-auto px-4 max-w-[1640px]">
           <div className="section-frame section-ultra section-mega">
             <div className="section-frame-content">
-              <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-16 xl:gap-24 items-center">
+              <div className="learn-layout grid lg:grid-cols-[1.05fr_0.95fr] gap-16 xl:gap-24 items-center">
                 {/* Left Side - Learn Trade Code */}
-                <div className="text-left">
-          <h2 className="font-normal leading-none mb-8"
+                <div className="text-left learn-copy">
+          <h2 className="learn-heading font-normal leading-none mb-8"
             style={{fontFamily: '"Ruigslay"', letterSpacing: '0px', fontWeight: 600, fontSize: 'clamp(80px, 10vw, 138px)', color: '#1E1E1E', textShadow: '0 18px 36px rgba(16, 32, 24, 0.28)'}}>
                     LEARN
                     <br />
@@ -94,7 +94,7 @@ export default function Home() {
                     <br />
                     CODE
                   </h2>
-                  <div className="flex gap-4 mt-8 flex-wrap">
+                  <div className="flex gap-4 mt-8 flex-wrap learn-cta-group">
                     <Link
                       href="/learn"
                       className="cta-primary px-7"
@@ -113,7 +113,7 @@ export default function Home() {
                 </div>
 
                 {/* Right Side - Roadmap Image */}
-                <div className="flex justify-center lg:justify-end">
+                <div className="flex justify-center lg:justify-end learn-visual">
                   <div className="relative" style={{ maxWidth: '780px' }}>
                     <Image
                       src="/image.png"
@@ -215,14 +215,14 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="section-frame section-wide soft-green">
             <div className="section-frame-content">
-              <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-16 items-center">
-                <div>
-    <h2 className="mb-2 leading-[0.88]"
+              <div className="code-layout grid lg:grid-cols-[1.05fr_0.95fr] gap-16 items-center">
+                <div className="code-copy">
+    <h2 className="code-heading mb-2 leading-[0.88]"
             style={{fontFamily: '"Ruigslay"', fontWeight: 600, fontSize: 'clamp(60px, 8vw, 96px)', color: '#1E1E1E', letterSpacing: '-3px', textShadow: '0 18px 36px rgba(20, 40, 30, 0.32)'}}>
                     BUILD
                     CODE
                   </h2>
-      <p className="text-gray-700 text-lg mb-6 max-w-xl"
+      <p className="code-subhead text-gray-700 text-lg mb-6 max-w-xl"
                      style={{fontFamily: 'Bricolage Grotesque, -apple-system, Roboto, Helvetica, sans-serif', letterSpacing: '-0.3px'}}>
                     Spin up algorithms in our browser editor, run historical tests, and track performance dashboards without leaving the safe practice environment.
                   </p>
@@ -235,8 +235,8 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
-                <div className="rounded-[28px] shadow-lg border border-[#CDEBD9] p-8" style={{ backgroundColor: 'var(--surface-white)' }}>
-                  <div className="flex items-center justify-between mb-6">
+                <div className="rounded-[28px] shadow-lg border border-[#CDEBD9] p-8 code-snippet-card" style={{ backgroundColor: 'var(--surface-white)' }}>
+                  <div className="flex items-center justify-between mb-6 code-snippet-header">
                     <span className="uppercase tracking-[0.35em] text-xs text-[#0ea351]" style={{fontFamily: 'Bricolage Grotesque'}}>Strategy.js</span>
                     <div className="flex gap-2">
                       <span className="w-3 h-3 rounded-full bg-[#ff5f5f]"></span>
@@ -254,7 +254,7 @@ export default function Home() {
 });
 
 backtest(crossover).run('AAPL');`}</pre>
-                  <div className="mt-6 flex items-center justify-between text-xs text-[#0ea351]">
+                  <div className="mt-6 flex items-center justify-between text-xs text-[#0ea351] code-snippet-stats">
                     <span style={{fontFamily: 'Bricolage Grotesque'}}>Sharpe 1.6</span>
                     <span style={{fontFamily: 'Bricolage Grotesque'}}>Win Rate 62%</span>
                     <span style={{fontFamily: 'Bricolage Grotesque'}}>Max DD -4.2%</span>

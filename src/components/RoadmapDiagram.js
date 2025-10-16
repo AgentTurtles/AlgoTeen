@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import Xarrow, { Xwrapper } from 'react-xarrows';
 
 const INTERACTIVE_CLASSES =
@@ -602,6 +602,7 @@ function InfoPanel({ node }) {
 
 export default function RoadmapDiagram() {
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const rootRef = useRef(null);
 
   const edges = useMemo(() => {
     const topicEdges = leftTopics
@@ -663,8 +664,30 @@ export default function RoadmapDiagram() {
     setSelectedDetail(null);
   }, []);
 
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const container = root.closest('.learn-roadmap-diagram') ?? root.parentElement;
+    if (!container) return;
+
+    const scrollToCenter = () => {
+      const maxScroll = Math.max(container.scrollWidth - container.clientWidth, 0);
+      container.scrollLeft = maxScroll > 0 ? maxScroll / 2 : 0;
+    };
+
+    const frame = requestAnimationFrame(scrollToCenter);
+    window.addEventListener('resize', scrollToCenter);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', scrollToCenter);
+    };
+  }, []);
+
   return (
     <div
+      ref={rootRef}
       className="relative w-full overflow-visible pt-10 md:pt-14"
       style={{
         marginTop: 'clamp(80px, 10vw, 300px)',

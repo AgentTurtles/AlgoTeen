@@ -97,11 +97,9 @@ export default function LearnPage() {
           <section id="roadmap" className="relative learn-roadmap-shell" style={{ backgroundColor: 'var(--surface-white)' }}>
             <div className="w-full pb-4 learn-roadmap-diagram">
               <div className="relative learn-roadmap-title-wrapper" style={{ marginTop: 'clamp(16px, 6vw, 120px)' }}>
-                <div
-                  className="absolute left-1/2 -translate-x-1/2 text-center text-shadow-lg/20 learn-roadmap-title"
-                  style={{ top: 'clamp(-400px, -18vw, -140px)', alignContent: 'center' }}
-                >
+                <div className="learn-roadmap-title">
                   <span
+                    className="learn-roadmap-heading"
                     style={{
                       fontFamily: '"Ruigslay"',
                       fontSize: 'clamp(72px, 13vw, 300px)',
@@ -114,14 +112,13 @@ export default function LearnPage() {
                   </span>
 
                   <p
-                    className="mt-4 mx-auto"
+                    className="mt-4 mx-auto learn-roadmap-subhead"
                     style={{
                       fontFamily: 'Bricolage Grotesque, -apple-system, Roboto, Helvetica, sans-serif',
                       fontSize: '40px',
                       lineHeight: '1.6',
                       letterSpacing: '-0.4px',
-                      color: '#1E1E1E',
-                      textAlign: 'left'
+                      color: '#1E1E1E'
                     }}
                   >
                     MODULE 1: Trading

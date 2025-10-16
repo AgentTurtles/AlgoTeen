@@ -68,6 +68,7 @@ export default function GlobalStyles() {
         body {
           background: var(--surface-base);
           color: var(--surface-ink);
+          overflow-x: hidden;
         }
 
         .nav-shell {
@@ -244,6 +245,40 @@ export default function GlobalStyles() {
           margin-left: auto;
           margin-right: auto;
           width: min(100%, clamp(1080px, 88vw, 1360px));
+        }
+
+        .learn-roadmap-title {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 1rem;
+          text-align: center;
+        }
+
+        .learn-roadmap-subhead {
+          text-align: center;
+        }
+
+        @media (min-width: 1024px) {
+          .learn-roadmap-title {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            top: clamp(-400px, -18vw, -140px);
+          }
+
+          .learn-roadmap-subhead {
+            text-align: left;
+          }
+        }
+
+        .learn-roadmap-title {
+          top: clamp(-400px, -18vw, -140px);
+        }
+
+        .learn-roadmap-subhead {
+          text-align: left;
         }
 
         .section-frame.section-ultra .section-frame-content {
@@ -525,6 +560,10 @@ export default function GlobalStyles() {
           margin-top: clamp(2rem, 5vw, 3.5rem);
         }
 
+        .code-snippet-card {
+          width: 100%;
+        }
+
         .support-card {
           background: rgba(255, 255, 255, 0.78);
           border: 1px solid rgba(15, 47, 31, 0.12);
@@ -788,6 +827,113 @@ export default function GlobalStyles() {
             width: 100%;
             min-height: 52px;
             font-size: clamp(17px, 4.2vw, 18px) !important;
+          }
+
+          .learn-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 2.2rem;
+          }
+          .learn-copy {
+            text-align: center !important;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.4rem;
+          }
+          .learn-heading {
+            font-size: clamp(52px, 17vw, 88px) !important;
+            line-height: 0.9 !important;
+            text-align: center !important;
+            letter-spacing: -1.8px !important;
+          }
+          .learn-cta-group {
+            width: 100%;
+            justify-content: center;
+          }
+          .learn-cta-group .cta-primary,
+          .learn-cta-group .cta-pill {
+            width: 100%;
+            max-width: 320px;
+          }
+          .learn-visual {
+            width: 100%;
+          }
+          .learn-visual img {
+            transform: none !important;
+          }
+
+          .code-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 2.2rem;
+          }
+          .code-copy {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.2rem;
+          }
+          .code-heading {
+            text-align: center;
+            font-size: clamp(54px, 15vw, 82px) !important;
+            letter-spacing: -2.2px !important;
+          }
+          .code-subhead {
+            max-width: 520px;
+            text-align: center !important;
+          }
+
+          .section-frame.section-wide,
+          .section-frame.section-ultra,
+          .section-frame.section-mega {
+            width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+          }
+          .section-frame.section-mega {
+            border-radius: clamp(24px, 5vw, 36px);
+          }
+          .section-frame.section-ultra .section-frame-content,
+          .section-frame.section-mega .section-frame-content,
+          .section-frame.section-wide .section-frame-content {
+            padding: clamp(1.6rem, 6vw, 2.8rem) !important;
+          }
+
+          .learn-roadmap-title {
+            top: 0;
+            transform: none;
+            left: auto;
+            right: auto;
+          }
+          .learn-roadmap-subhead {
+            font-size: clamp(22px, 7vw, 30px) !important;
+          }
+
+          .code-snippet-card {
+            max-width: min(100%, 520px);
+            padding: clamp(1.4rem, 5.5vw, 2rem) !important;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          .code-snippet-card pre {
+            padding: clamp(1rem, 4.8vw, 1.4rem) !important;
+            font-size: clamp(12px, 3.6vw, 14px) !important;
+            line-height: 1.6 !important;
+            white-space: pre-wrap !important;
+            word-break: break-word !important;
+          }
+          .code-snippet-header,
+          .code-snippet-stats {
+            flex-direction: column;
+            gap: 0.75rem;
+            align-items: center;
+          }
+          .code-snippet-header span,
+          .code-snippet-stats span {
+            width: 100%;
+            text-align: center;
           }
         }
 
