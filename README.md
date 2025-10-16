@@ -2,8 +2,6 @@
 
 AlgoTeen is a Next.js learning platform that teaches teens how to trade safely. The site mixes trading fundamentals, programming roadmaps, and practice projects. Static content lives in the App Router, styling is handled with Tailwind utilities, and interactive diagrams use `react-xarrows`.
 
-If you want to add screenshots later, drop them into `public/` and reference them in this file.
-
 ## Features
 
 - Landing page with hero, strategy tracks, and pricing sections
@@ -41,13 +39,6 @@ npm run dev
 ```
 
 Open http://localhost:3000 to view the app. The Learn roadmap is available at http://localhost:3000/learn.
-
-## Available Scripts
-
-- `npm run dev` starts the local development server
-- `npm run build` creates a production build
-- `npm run start` serves the build output
-- `npm run lint` runs ESLint checks
 
 ## Project Structure
 
