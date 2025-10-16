@@ -69,10 +69,6 @@ export default function Home() {
                   sizes="(min-width: 1024px) 610px, 90vw"
                 />
               </div>
-              <div className="text-white text-right mr-4 mt-3"
-                   style={{fontFamily: 'Bricolage Grotesque', fontSize: '16px', letterSpacing: '0px', fontWeight: 300}}>
-                Backtesting*
-              </div>
             </div>
           </div>
         </div>

@@ -576,6 +576,10 @@ export default function GlobalStyles() {
           transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
         }
 
+        .footer-wordmark-wrap {
+          pointer-events: none;
+        }
+
         .support-card:hover {
           transform: translateY(-6px);
           box-shadow: 0 36px 62px rgba(10, 40, 27, 0.28);
@@ -934,6 +938,48 @@ export default function GlobalStyles() {
           .code-snippet-stats span {
             width: 100%;
             text-align: center;
+          }
+
+          .footer-main {
+            flex-direction: column;
+            gap: 2.5rem;
+            align-items: center;
+          }
+          .footer-note {
+            border: none !important;
+            padding-right: 0 !important;
+            text-align: center;
+          }
+          .footer-note-text {
+            font-size: clamp(16px, 4.6vw, 18px) !important;
+            max-width: 520px;
+            margin: 0 auto;
+          }
+          .footer-links {
+            width: 100%;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 1.5rem;
+            text-align: center;
+          }
+          .footer-links-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+          }
+          .footer-heading {
+            font-size: clamp(16px, 5vw, 20px) !important;
+          }
+          .footer-wordmark-wrap {
+            position: static !important;
+            margin-top: 3rem;
+          }
+          .footer-wordmark {
+            font-size: clamp(36px, 18vw, 110px) !important;
+            transform: none !important;
+            line-height: 1 !important;
+            padding: 0 !important;
+            letter-spacing: clamp(-2px, -0.6vw, -4px) !important;
           }
         }
 
