@@ -59,6 +59,26 @@ const SITE_SEARCH_INDEX = [
     href: '/learn#roadmap',
     sectionId: 'roadmap',
     description: 'Interactive trading and programming roadmap modules.'
+  },
+  {
+    id: 'codelab-page',
+    label: 'Code Lab Page',
+    href: '/codelab',
+    description: 'Enter the browser-based environment for coding and testing strategies.'
+  },
+  {
+    id: 'codelab-overview',
+    label: 'Code Lab · Overview',
+    href: '/codelab#overview',
+    sectionId: 'overview',
+    description: 'Hero banner introducing the Code Lab desk and quick links.'
+  },
+  {
+    id: 'codelab-desk',
+    label: 'Code Lab · Desk',
+    href: '/codelab#desk',
+    sectionId: 'desk',
+    description: 'Live editor, charting, and paper trading flow in one workspace.'
   }
 ];
 
