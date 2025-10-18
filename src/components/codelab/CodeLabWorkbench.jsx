@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { DEFAULT_STRATEGY_CODE, STRATEGY_TEMPLATES, STARTING_CAPITAL, runBacktest } from '../../lib/backtester';
+import {
+  DEFAULT_STRATEGY_CODE,
+  STRATEGY_TEMPLATES,
+  STARTING_CAPITAL,
+  runBacktest
+} from '../../lib/backtester';
 import loadMonaco from '../../lib/monacoLoader';
 
 const templateList = Object.values(STRATEGY_TEMPLATES);
@@ -11,17 +16,17 @@ const EXPERIENCE_OPTIONS = [
   {
     id: 'editor',
     title: 'Code editor',
-    description: 'Launch Monaco with live brokerage data beside your script.'
+    description: 'Launch Monaco with brokerage context and run instant backtests.'
   },
   {
     id: 'strategy',
     title: 'Strategy tester',
-    description: 'Adjust parameters, run quick backtests, and read the metrics.'
+    description: 'Drag logic blocks, tune presets, and preview performance.'
   },
   {
     id: 'paper',
     title: 'Paper trading',
-    description: 'Route simulated orders, monitor PnL, and cancel targets in real time.'
+    description: 'Practise orders on a pro desk with watchlists, charts, and PnL.'
   }
 ];
 
@@ -61,6 +66,29 @@ const ASSET_UNIVERSES = {
   }
 };
 
+const BLOCK_LIBRARY = [
+  {
+    category: 'Data',
+    blocks: ['Price (OHLCV)', 'Indicator (RSI)', 'Indicator (EMA)', 'Macro & Fundamentals', 'Alternative data']
+  },
+  {
+    category: 'Logic',
+    blocks: ['If / Then', 'Compare', 'CrossOver', 'Time Window', 'And / Or Combiner']
+  },
+  {
+    category: 'Risk',
+    blocks: ['Position sizing', 'Max exposure', 'Stop / Take-profit', 'Trailing stop']
+  },
+  {
+    category: 'Orders',
+    blocks: ['Market', 'Limit', 'Stop', 'Bracket', 'OCO']
+  },
+  {
+    category: 'Portfolio',
+    blocks: ['Rebalance', 'Sector caps', 'Beta hedge', 'Pairs trade']
+  }
+];
+
 function ExperienceModal({ open, onSelect }) {
   if (!open) {
     return null;
@@ -68,11 +96,11 @@ function ExperienceModal({ open, onSelect }) {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#03140b]/70 backdrop-blur" role="dialog" aria-modal="true">
-      <div className="mx-4 w-full max-w-3xl rounded-3xl border border-emerald-500/30 bg-white p-8 shadow-[0_40px_120px_rgba(4,20,12,0.6)] sm:p-10">
+      <div className="mx-4 w-full max-w-3xl rounded-3xl border border-emerald-500/40 bg-white p-8 shadow-[0_40px_120px_rgba(4,20,12,0.6)] sm:p-10">
         <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Tailor your session</p>
         <h2 className="mt-4 font-ruigslay text-4xl text-[#0f3224] sm:text-5xl">Where should we start?</h2>
         <p className="mt-3 font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
-          Pick a focus for this visit. We will drop you into the right section—switch anytime using the navigation.
+          Choose the desk that matches your goal. You can always jump across sections using the sticky navigation.
         </p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -81,7 +109,7 @@ function ExperienceModal({ open, onSelect }) {
               key={option.id}
               type="button"
               onClick={() => onSelect(option.id)}
-              className="group flex h-full flex-col rounded-2xl border border-emerald-500/30 bg-emerald-50/60 p-5 text-left transition hover:border-emerald-500/70 hover:bg-emerald-50 shadow-[0_22px_44px_rgba(12,38,26,0.12)]"
+              className="group flex h-full flex-col rounded-2xl border border-emerald-500/40 bg-emerald-50/70 p-5 text-left transition hover:border-emerald-500/70 hover:bg-emerald-50 shadow-[0_22px_44px_rgba(12,38,26,0.12)]"
             >
               <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">{option.title}</span>
               <span className="mt-3 font-ruigslay text-2xl text-[#0f3224] group-hover:text-emerald-700">{option.title}</span>
@@ -93,7 +121,7 @@ function ExperienceModal({ open, onSelect }) {
         <button
           type="button"
           onClick={() => onSelect('editor')}
-          className="mt-6 inline-flex items-center justify-center rounded-full border border-emerald-500/30 px-6 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-emerald-700 transition hover:border-emerald-500/70 hover:bg-emerald-50"
+          className="mt-6 inline-flex items-center justify-center rounded-full border border-emerald-500/40 px-6 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-emerald-700 transition hover:border-emerald-500/70 hover:bg-emerald-50"
         >
           Explore everything
         </button>
@@ -102,7 +130,108 @@ function ExperienceModal({ open, onSelect }) {
   );
 }
 
-function MarketDataPanel({
+function EditorRunnerPanel({ status, onRun, onStop, progress, metrics, logs, onResetLogs, error }) {
+  const running = status === 'running';
+  const hasResults = Boolean(metrics);
+
+  return (
+    <div className="rounded-3xl border border-emerald-500/25 bg-white/95 p-5 shadow-[0_28px_64px_rgba(12,38,26,0.12)] sm:p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Runner panel</p>
+          <h3 className="mt-2 font-ruigslay text-3xl leading-tight text-[#0f3224]">Backtest controls</h3>
+          <p className="mt-2 max-w-lg font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
+            Launch your script against the latest brokerage dataset, review real-time metrics, and monitor log output as the simulation progresses.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={running ? onStop : onRun}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold tracking-[-0.02em] transition ${
+              running
+                ? 'border border-emerald-500/40 bg-emerald-50/70 text-emerald-700 hover:border-emerald-500/70'
+                : 'cta-primary px-6'
+            }`}
+          >
+            {running ? 'Stop run' : 'Play backtest'}
+          </button>
+          <button
+            type="button"
+            onClick={onResetLogs}
+            className="rounded-xl border border-emerald-500/30 px-4 py-2 text-sm font-bricolage text-[#0f3224] transition hover:border-emerald-500/60 hover:bg-emerald-50/70"
+          >
+            Clear logs
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <div>
+          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">
+            <span>Progress</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-emerald-900/10">
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            { label: 'CAGR', value: hasResults ? `${metrics.cagr.toFixed(2)}%` : '—' },
+            { label: 'Sharpe', value: hasResults ? metrics.sharpe.toFixed(2) : '—' },
+            { label: 'Sortino', value: hasResults ? metrics.sortino.toFixed(2) : '—' },
+            { label: 'Max DD', value: hasResults ? `${metrics.maxDrawdown.toFixed(2)}%` : '—' },
+            { label: 'Win rate', value: hasResults ? `${metrics.winRate.toFixed(2)}%` : '—' },
+            { label: 'Exposure', value: hasResults ? `${metrics.exposure.toFixed(2)}%` : '—' }
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-white via-emerald-50/60 to-white px-4 py-3 text-sm font-bricolage text-[#0f3224]"
+            >
+              <span className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">{item.label}</span>
+              <span className="mt-2 block text-xl font-semibold">{running ? '…' : item.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Logs</span>
+            <span className="text-xs font-bricolage text-[#0f3224]/60">INFO · WARN · ERROR</span>
+          </div>
+          <div className="max-h-48 overflow-y-auto rounded-2xl border border-emerald-500/20 bg-[#07110c] p-4 font-mono text-xs text-emerald-100">
+            {logs.length === 0 ? (
+              <p className="font-bricolage text-sm text-emerald-100/70">Run a backtest to populate live logs.</p>
+            ) : (
+              <ul className="space-y-2">
+                {logs.map((log, index) => (
+                  <li key={`${log.timestamp}-${index}`} className={`flex items-start gap-3 ${
+                    log.level === 'error'
+                      ? 'text-rose-300'
+                      : log.level === 'warn'
+                      ? 'text-amber-300'
+                      : 'text-emerald-200'
+                  }`}>
+                    <span className="shrink-0 font-semibold">[{log.level.toUpperCase()}]</span>
+                    <span className="whitespace-pre-wrap text-left">{log.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        {error ? (
+          <div className="rounded-2xl border border-rose-400/50 bg-rose-50/80 px-4 py-3 text-sm font-bricolage text-rose-700">{error}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function DataSidePanel({
   universes,
   assetClass,
   onAssetChange,
@@ -116,13 +245,19 @@ function MarketDataPanel({
   lastSyncedAt,
   error,
   onRetry,
-  className = ''
+  dataset
 }) {
   const syncing = status === 'loading';
   const hasError = status === 'error';
   const universe = universes[assetClass];
   const symbolOptions = universe?.symbols ?? [];
   const timeframeOptions = universe?.timeframes ?? ['1Day'];
+
+  const previewBars = useMemo(() => dataset?.slice(-6) ?? [], [dataset]);
+  const closes = previewBars.map((bar) => bar.close);
+  const min = closes.length > 0 ? Math.min(...closes) : null;
+  const max = closes.length > 0 ? Math.max(...closes) : null;
+  const normalized = closes.map((value) => ((value - min) / (max - min || 1)) * 100);
 
   const lastSyncedLabel = lastSyncedAt
     ? new Intl.DateTimeFormat('en-US', {
@@ -133,34 +268,26 @@ function MarketDataPanel({
       }).format(lastSyncedAt)
     : '—';
 
-  let statusCopy = 'Ready for backtests.';
-
-  if (syncing) {
-    statusCopy = 'Loading real brokerage candles…';
-  } else if (hasError) {
-    statusCopy = 'Unable to load brokerage data. Fix the issue and try again.';
-  }
-
   return (
-    <div
-      className={`space-y-6 rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-white via-emerald-50/60 to-white p-5 shadow-[0_24px_54px_rgba(12,38,26,0.1)] sm:p-6 ${className}`}
-    >
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/70">Brokerage data feed</p>
-          <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">
+    <div className="space-y-6 rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-white via-emerald-50/70 to-white p-5 shadow-[0_28px_60px_rgba(12,38,26,0.1)] sm:p-6">
+      <div className="flex flex-col gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Data side panel</p>
+          <h3 className="mt-2 font-ruigslay text-3xl leading-tight text-[#0f3224]">
             {metadata.symbol} · {metadata.timeframe}
           </h3>
-          <p className="font-bricolage text-sm leading-relaxed text-[#0f3224]/75">{statusCopy}</p>
+          <p className="mt-2 font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
+            Choose the market universe, inspect the latest rows, and confirm the source before you hit run.
+          </p>
         </div>
 
-        <div className="flex flex-1 flex-col gap-4 sm:flex-row sm:items-end sm:justify-end">
+        <div className="flex flex-col gap-3">
           <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
             <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Market</span>
             <select
               value={assetClass}
               onChange={(event) => onAssetChange(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 sm:w-48"
+              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             >
               {Object.entries(universes).map(([key, value]) => (
                 <option key={key} value={key}>
@@ -169,13 +296,12 @@ function MarketDataPanel({
               ))}
             </select>
           </label>
-
           <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
             <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Symbol</span>
             <select
               value={symbol}
               onChange={(event) => onSymbolChange(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 sm:w-48"
+              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             >
               {symbolOptions.map((option) => (
                 <option key={option.symbol} value={option.symbol}>
@@ -184,13 +310,12 @@ function MarketDataPanel({
               ))}
             </select>
           </label>
-
           <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
             <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Timeframe</span>
             <select
               value={timeframe}
               onChange={(event) => onTimeframeChange(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 sm:w-40"
+              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             >
               {timeframeOptions.map((frame) => (
                 <option key={frame} value={frame}>
@@ -199,12 +324,11 @@ function MarketDataPanel({
               ))}
             </select>
           </label>
-
           <button
             type="button"
             onClick={onRetry}
             disabled={syncing}
-            className={`w-full rounded-xl border px-4 py-2 text-sm font-bricolage transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 sm:w-auto ${
+            className={`rounded-xl border px-4 py-2 text-sm font-bricolage transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 ${
               syncing
                 ? 'cursor-not-allowed border-emerald-500/20 bg-emerald-50/60 text-emerald-900/40'
                 : 'border-emerald-500/40 bg-white text-emerald-900 hover:border-emerald-500/70 hover:bg-emerald-50/80'
@@ -215,18 +339,85 @@ function MarketDataPanel({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-2xl bg-emerald-900/5 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Bars loaded</p>
-          <p className="mt-2 text-xl font-semibold text-[#0f3224]">{barsCount ?? '—'}</p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl bg-emerald-900/5 p-3">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Rows</p>
+          <p className="mt-2 text-sm font-semibold text-[#0f3224]">{barsCount ?? '—'}</p>
         </div>
-        <div className="rounded-2xl bg-emerald-900/5 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Source</p>
-          <p className="mt-2 text-xl font-semibold text-[#0f3224]">{metadata.source}</p>
+        <div className="rounded-2xl bg-emerald-900/5 p-3">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Source</p>
+          <p className="mt-2 text-sm font-semibold text-[#0f3224]">{metadata.source}</p>
         </div>
-        <div className="rounded-2xl bg-emerald-900/5 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Last synced</p>
-          <p className="mt-2 text-xl font-semibold text-[#0f3224]">{lastSyncedLabel}</p>
+        <div className="rounded-2xl bg-emerald-900/5 p-3">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Last synced</p>
+          <p className="mt-2 text-sm font-semibold text-[#0f3224]">{lastSyncedLabel}</p>
+        </div>
+      </div>
+
+      <div>
+        <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Data preview</span>
+        <div className="mt-3 max-h-56 overflow-hidden rounded-2xl border border-emerald-500/20 bg-white/95">
+          <table className="min-w-full divide-y divide-emerald-500/10 text-left text-xs font-bricolage text-[#0f3224]">
+            <thead className="bg-emerald-500/10 uppercase tracking-[0.2em] text-emerald-900/70">
+              <tr>
+                <th className="px-3 py-2">Date</th>
+                <th className="px-3 py-2">Open</th>
+                <th className="px-3 py-2">High</th>
+                <th className="px-3 py-2">Low</th>
+                <th className="px-3 py-2">Close</th>
+                <th className="px-3 py-2">Volume</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-emerald-500/10">
+              {previewBars.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-4 text-center text-sm text-[#0f3224]/70">
+                    Load brokerage data to inspect the latest bars.
+                  </td>
+                </tr>
+              ) : (
+                previewBars.map((bar) => (
+                  <tr key={`${bar.date}-${bar.close}`}>
+                    <td className="px-3 py-2">{bar.date}</td>
+                    <td className="px-3 py-2">${bar.open.toFixed(2)}</td>
+                    <td className="px-3 py-2">${bar.high.toFixed(2)}</td>
+                    <td className="px-3 py-2">${bar.low.toFixed(2)}</td>
+                    <td className="px-3 py-2 font-semibold text-emerald-700">${bar.close.toFixed(2)}</td>
+                    <td className="px-3 py-2">{bar.volume.toLocaleString()}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Mini chart</span>
+        <div className="mt-3 h-32 rounded-2xl border border-emerald-500/20 bg-[#04140c] p-4">
+          {previewBars.length === 0 ? (
+            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-emerald-500/30 text-xs font-bricolage text-emerald-100/70">
+              Awaiting market data…
+            </div>
+          ) : (
+            <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="h-full w-full">
+              <defs>
+                <linearGradient id="miniChartGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#a7f3d0" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="#34d399" stopOpacity="0.3" />
+                </linearGradient>
+              </defs>
+              <polyline
+                fill="none"
+                stroke="url(#miniChartGradient)"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                points={normalized
+                  .map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`)
+                  .join(' ')}
+              />
+            </svg>
+          )}
         </div>
       </div>
 
@@ -237,29 +428,113 @@ function MarketDataPanel({
   );
 }
 
-function StrategyLibrary({ onSelect, activeId }) {
+function EditorParameterPanel({ params, onChange, onPresetSelect, activePreset, gridSearchEnabled, onToggleGridSearch }) {
   return (
-    <div className="rounded-3xl border border-emerald-500/20 bg-white/90 p-5 shadow-[0_18px_38px_rgba(12,38,26,0.12)] backdrop-blur sm:p-6">
-      <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Starter strategies</h3>
-      <p className="mt-2 font-bricolage text-sm leading-relaxed text-[#0f3224]/75">
-        Load a template, tweak the numbers, and re-run. Each script is ready for beginners—comments highlight where to adjust risk and exits.
-      </p>
+    <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-5 shadow-[0_24px_52px_rgba(12,38,26,0.1)] sm:p-6">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Parameter panel</p>
+            <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Strategy hyperparameters</h3>
+            <p className="mt-2 font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
+              Tune core values and decide whether to enable grid search sweeps. Presets help beginners explore battle-tested combinations.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-emerald-500/60 text-emerald-600 focus:ring-emerald-500"
+              checked={gridSearchEnabled}
+              onChange={(event) => onToggleGridSearch(event.target.checked)}
+            />
+            Grid search
+          </label>
+        </div>
 
-      <ul className="mt-5 space-y-3">
-        {templateList.map((template) => (
-          <li key={template.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(template)}
-              className={`flex w-full flex-col rounded-2xl border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 ${
-                activeId === template.id
-                  ? 'border-emerald-500 bg-emerald-50/80 text-emerald-900'
-                  : 'border-emerald-500/20 bg-white/90 text-[#0f3224] hover:border-emerald-500/50 hover:bg-emerald-50/70'
-              }`}
-            >
-              <span className="font-bricolage text-base font-semibold">{template.name}</span>
-              <span className="mt-1 text-sm font-bricolage text-[#0f3224]/70">{template.description}</span>
-            </button>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {[
+            { key: 'fast', label: 'Fast length', hint: 'EMA lookback for entries' },
+            { key: 'slow', label: 'Slow length', hint: 'Longer trend filter' },
+            { key: 'exit', label: 'RSI exit', hint: 'Overbought trigger' },
+            { key: 'risk', label: 'Stop loss %', hint: 'Capital at risk per trade' },
+            { key: 'target', label: 'Take profit %', hint: 'Capture winners' },
+            { key: 'size', label: 'Position size', hint: 'Units per order' }
+          ].map((field) => (
+            <label key={field.key} className="flex flex-col text-sm font-bricolage text-[#0f3224]">
+              <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">
+                {field.label}
+              </span>
+              <input
+                type="number"
+                className="mt-2 rounded-xl border border-emerald-500/30 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                value={params[field.key]}
+                onChange={(event) => onChange(field.key, Number(event.target.value))}
+              />
+              <span className="mt-1 text-xs text-[#0f3224]/60">{field.hint}</span>
+            </label>
+          ))}
+        </div>
+
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Presets</span>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {templateList.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => onPresetSelect(template)}
+                className={`rounded-2xl border px-4 py-3 text-left text-sm font-bricolage transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 ${
+                  activePreset === template.id
+                    ? 'border-emerald-500 bg-emerald-50/80 text-emerald-900'
+                    : 'border-emerald-500/30 bg-white/90 text-[#0f3224] hover:border-emerald-500/60 hover:bg-emerald-50/60'
+                }`}
+              >
+                <span className="block text-base font-semibold">{template.name}</span>
+                <span className="mt-1 block text-xs text-[#0f3224]/70">{template.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnitTestsPanel({ results }) {
+  const tests = [
+    {
+      id: 'defines-strategy',
+      label: 'strategy() exported',
+      passed: results ? true : false
+    },
+    {
+      id: 'generates-trades',
+      label: 'At least one trade',
+      passed: (results?.trades?.length ?? 0) > 0
+    },
+    {
+      id: 'positive-return',
+      label: 'Non-zero total return',
+      passed: results ? results.metrics.totalReturn !== 0 : false
+    }
+  ];
+
+  return (
+    <div className="rounded-3xl border border-emerald-500/25 bg-white/95 p-5 shadow-[0_22px_48px_rgba(12,38,26,0.1)] sm:p-6">
+      <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Unit tests</p>
+      <h3 className="mt-2 font-ruigslay text-3xl text-[#0f3224]">Signal coverage</h3>
+      <ul className="mt-4 space-y-3">
+        {tests.map((test) => (
+          <li
+            key={test.id}
+            className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm font-bricolage ${
+              test.passed ? 'border-emerald-500/40 bg-emerald-50/70 text-emerald-800' : 'border-emerald-500/20 bg-white/80 text-[#0f3224]'
+            }`}
+          >
+            <span>{test.label}</span>
+            <span className={`text-xs font-semibold uppercase tracking-[0.28em] ${test.passed ? 'text-emerald-700' : 'text-rose-600'}`}>
+              {test.passed ? 'PASS' : 'FAIL'}
+            </span>
           </li>
         ))}
       </ul>
@@ -267,18 +542,97 @@ function StrategyLibrary({ onSelect, activeId }) {
   );
 }
 
-function MetricsPanel({ metrics, status }) {
+function DocsPanel({ source }) {
+  return (
+    <div className="rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-white via-emerald-50/80 to-white p-5 shadow-[0_20px_44px_rgba(12,38,26,0.1)] sm:p-6">
+      <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Docs & SDK</p>
+      <h3 className="mt-2 font-ruigslay text-3xl text-[#0f3224]">In-app reference</h3>
+      <div className="mt-4 space-y-4 text-sm font-bricolage text-[#0f3224]/75">
+        <div>
+          <p className="font-semibold uppercase tracking-[0.22em] text-emerald-800">Events</p>
+          <p className="mt-1">Use <code>strategy({`{ data, index, price, bar, state, helpers }`})</code> with helpers like <code>ema</code>, <code>rsi</code>, and <code>percentChange</code>.</p>
+        </div>
+        <div>
+          <p className="font-semibold uppercase tracking-[0.22em] text-emerald-800">Order API</p>
+          <p className="mt-1">Return actions: <code>buy</code>, <code>sell</code>, or <code>exit</code> with optional <code>size</code> and <code>note</code>.</p>
+        </div>
+        <div>
+          <p className="font-semibold uppercase tracking-[0.22em] text-emerald-800">Indicators</p>
+          <p className="mt-1">Built-ins include <code>ema</code>, <code>sma</code>, <code>highest</code>, <code>lowest</code>, and <code>rsi</code>.</p>
+        </div>
+      </div>
+      <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-white/90 p-4 text-xs text-[#0f3224]/60">
+        Data provenance · {source}
+      </div>
+    </div>
+  );
+}
+
+function LiveMarketChart({ dataset, status, symbol, timeframe }) {
+  const points = dataset?.slice(-180) ?? [];
+  const hasData = points.length > 0;
+  const closes = points.map((bar) => bar.close);
+  const min = hasData ? Math.min(...closes) : 0;
+  const max = hasData ? Math.max(...closes) : 0;
+  const normalized = hasData ? closes.map((value) => ((value - min) / (max - min || 1)) * 100) : [];
+
+  const statusCopy =
+    status === 'loading'
+      ? 'Syncing Alpaca bars…'
+      : hasData
+      ? `${symbol} · ${timeframe} · Close range $${min.toFixed(2)} → $${max.toFixed(2)}`
+      : 'Load brokerage data to render the live tape.';
+
+  return (
+    <section className="space-y-6 rounded-4xl border border-emerald-500/25 bg-[#03150d] p-6 text-emerald-50 shadow-[0_40px_120px_rgba(3,21,13,0.6)] sm:p-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-200/70">Live market chart</span>
+          <h2 className="mt-2 font-ruigslay text-[clamp(2.5rem,6vw,4rem)] leading-[0.95] text-white">Intraday tape</h2>
+          <p className="mt-3 max-w-2xl font-bricolage text-sm text-emerald-100/80">{statusCopy}</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-500/30 bg-[#042516] px-4 py-3 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">
+          Powered by Alpaca Market Data
+        </div>
+      </div>
+
+      <div className="h-72 w-full rounded-3xl border border-emerald-500/20 bg-[#020b07] p-4 sm:h-80">
+        {hasData ? (
+          <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="h-full w-full">
+            <defs>
+              <linearGradient id="liveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.95" />
+                <stop offset="100%" stopColor="#34d399" stopOpacity="0.2" />
+              </linearGradient>
+            </defs>
+            <polyline
+              fill="none"
+              stroke="url(#liveGradient)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              points={normalized
+                .map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`)
+                .join(' ')}
+            />
+          </svg>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-emerald-500/30 font-bricolage text-sm text-emerald-100/70">
+            {status === 'loading' ? 'Loading latest candles…' : 'Load bars to view live action.'}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function BacktestMetrics({ metrics, status }) {
   const items = [
-    {
-      label: 'Ending Equity',
-      value: metrics ? `$${metrics.endingCapital.toFixed(2)}` : '—',
-      emphasis: true
-    },
-    { label: 'Total Return', value: metrics ? `${metrics.totalReturn.toFixed(2)}%` : '—' },
+    { label: 'Ending equity', value: metrics ? `$${metrics.endingCapital.toFixed(2)}` : '—', emphasis: true },
+    { label: 'Total return', value: metrics ? `${metrics.totalReturn.toFixed(2)}%` : '—' },
     { label: 'Trades', value: metrics ? metrics.totalTrades : '—' },
-    { label: 'Win Rate', value: metrics ? `${metrics.winRate.toFixed(2)}%` : '—' },
-    { label: 'Avg Trade', value: metrics ? `${metrics.averageReturn.toFixed(2)}%` : '—' },
-    { label: 'Max Drawdown', value: metrics ? `${metrics.maxDrawdown.toFixed(2)}%` : '—' }
+    { label: 'Win rate', value: metrics ? `${metrics.winRate.toFixed(2)}%` : '—' },
+    { label: 'Avg trade', value: metrics ? `${metrics.averageReturn.toFixed(2)}%` : '—' },
+    { label: 'Max drawdown', value: metrics ? `${metrics.maxDrawdown.toFixed(2)}%` : '—' }
   ];
 
   return (
@@ -385,7 +739,7 @@ function EquitySparkline({ equityCurve }) {
 
   return (
     <div className="rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-white via-emerald-50/50 to-emerald-100/40 p-4 shadow-[0_18px_36px_rgba(12,38,26,0.08)] sm:p-5">
-      <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Equity Curve</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Equity curve</span>
       <div className="mt-3 h-32 w-full rounded-2xl bg-[#0b2217] p-4 sm:h-36">
         <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="h-full w-full">
           <defs>
@@ -399,7 +753,9 @@ function EquitySparkline({ equityCurve }) {
             stroke="url(#equityGradient)"
             strokeWidth="3"
             strokeLinecap="round"
-            points={normalized.map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`).join(' ')}
+            points={normalized
+              .map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`)
+              .join(' ')}
           />
         </svg>
       </div>
@@ -411,56 +767,123 @@ function EquitySparkline({ equityCurve }) {
   );
 }
 
-function PriceChart({ dataset }) {
-  const points = dataset?.slice(-180) ?? [];
-  const hasData = points.length > 0;
+function StrategyBlocksCanvas({ activeTemplate }) {
+  return (
+    <div className="rounded-4xl border border-emerald-500/25 bg-white/95 p-6 shadow-[0_30px_80px_rgba(12,38,26,0.12)] sm:p-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Visual builder</span>
+          <h3 className="mt-2 font-ruigslay text-4xl leading-tight text-[#0f3224]">Canvas & logic blocks</h3>
+          <p className="mt-2 max-w-3xl font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
+            Drag blocks to craft a signal. AlgoTeen compiles the flow into a read-only preview so you can confirm the generated code.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-50/80 px-4 py-3 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-800">
+          Active preset · {STRATEGY_TEMPLATES[activeTemplate]?.name ?? 'Momentum Pulse'}
+        </div>
+      </div>
 
-  const closes = hasData ? points.map((bar) => bar.close) : [];
-  const min = hasData ? Math.min(...closes) : null;
-  const max = hasData ? Math.max(...closes) : null;
-  const normalized = hasData ? closes.map((value) => ((value - min) / (max - min || 1)) * 100) : [];
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="space-y-4 rounded-3xl border border-emerald-500/20 bg-emerald-900/5 p-6">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Blocks</span>
+            <span className="text-xs font-bricolage text-[#0f3224]/60">Drag & drop</span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {BLOCK_LIBRARY.map((group) => (
+              <div key={group.category} className="space-y-3 rounded-2xl border border-emerald-500/20 bg-white/90 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">{group.category}</p>
+                <ul className="space-y-2 text-sm font-bricolage text-[#0f3224]">
+                  {group.blocks.map((block) => (
+                    <li key={block} className="flex items-center justify-between rounded-xl bg-emerald-900/5 px-3 py-2">
+                      <span>{block}</span>
+                      <span className="text-[0.65rem] font-semibold uppercase tracking-[0.3em] text-emerald-700">Block</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
 
-  const rangeLabel = hasData
-    ? `Last ${points.length} bars • Close range $${min.toFixed(2)} → $${max.toFixed(2)}`
-    : 'Waiting for live bars…';
+        <div className="flex h-full flex-col gap-4 rounded-3xl border border-emerald-500/20 bg-white/95 p-6">
+          <div>
+            <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Compiled strategy</span>
+            <p className="mt-2 font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
+              Read-only output refreshed as you connect blocks. Export directly to the editor to fine-tune with JavaScript.
+            </p>
+          </div>
+          <pre className="flex-1 overflow-auto rounded-2xl border border-emerald-500/20 bg-[#07110c] p-4 font-mono text-xs text-emerald-100">
+{STRATEGY_TEMPLATES[activeTemplate]?.code ?? DEFAULT_STRATEGY_CODE}
+          </pre>
+          <button
+            type="button"
+            className="rounded-xl border border-emerald-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700 transition hover:border-emerald-500/60 hover:bg-emerald-50/70"
+          >
+            Send to editor
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BacktestResearchPanel() {
+  const sections = [
+    {
+      title: 'Engines',
+      bullets: [
+        'Event-driven bar/tick simulation with deterministic seeding',
+        'Plugin slots for slippage, commission, borrow fees'
+      ]
+    },
+    {
+      title: 'Metrics',
+      bullets: ['Equity & drawdown', 'Rolling Sharpe and Sortino', 'Turnover, exposure, Kelly fraction']
+    },
+    {
+      title: 'Trade analysis',
+      bullets: ['Trade distribution and holding time', 'Per-symbol and setup breakdowns', 'Heatmaps & factor returns']
+    },
+    {
+      title: 'Robustness',
+      bullets: ['Walk-forward and train/test splits', 'Monte-Carlo paths', 'Parameter stability charts']
+    },
+    {
+      title: 'Data management',
+      bullets: ['Ingest & resample with corporate actions', 'Timezone handling and caching', 'Snapshot datasets per run']
+    }
+  ];
 
   return (
-    <div className="flex h-full min-h-[320px] flex-col rounded-2xl border border-emerald-500/25 bg-[#04140c] p-5 text-emerald-50 shadow-[0_26px_52px_rgba(4,20,12,0.45)] sm:min-h-[360px] sm:p-6">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="font-ruigslay text-3xl leading-tight text-white">Live chart</h3>
-        <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-200/70">Market tape</span>
-      </div>
-      <p className="mt-2 font-bricolage text-sm text-emerald-100/70">{rangeLabel}</p>
+    <div className="rounded-4xl border border-emerald-500/25 bg-white/95 p-6 shadow-[0_30px_80px_rgba(12,38,26,0.12)] sm:p-8">
+      <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Research suite</span>
+      <h3 className="mt-2 font-ruigslay text-4xl leading-tight text-[#0f3224]">Backtesting & analytics</h3>
+      <p className="mt-3 max-w-3xl font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
+        AlgoTeen ships with professional analytics so beginners can understand every run. Review the highlights below to learn what the desk tracks automatically.
+      </p>
 
-      <div className="mt-4 h-48 w-full rounded-xl border border-emerald-500/20 bg-[#020b07] p-4 sm:h-56 lg:h-60">
-        {hasData ? (
-          <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="h-full w-full">
-            <defs>
-              <linearGradient id="priceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#a7f3d0" stopOpacity="0.95" />
-                <stop offset="100%" stopColor="#34d399" stopOpacity="0.3" />
-              </linearGradient>
-            </defs>
-            <polyline
-              fill="none"
-              stroke="url(#priceGradient)"
-              strokeWidth="2.6"
-              strokeLinecap="round"
-              points={normalized.map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`).join(' ')}
-            />
-          </svg>
-        ) : (
-          <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-emerald-500/30 text-sm font-bricolage text-emerald-100/60">
-            Load market data to view recent price action.
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {sections.map((section) => (
+          <div key={section.title} className="space-y-3 rounded-3xl border border-emerald-500/20 bg-emerald-900/5 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">{section.title}</p>
+            <ul className="space-y-2 text-sm font-bricolage text-[#0f3224]">
+              {section.bullets.map((bullet) => (
+                <li key={bullet} className="flex items-start gap-2">
+                  <span className="mt-1 h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+                  <span>{bullet}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
 }
 
 function PaperPerformanceChart({ history }) {
-  const points = history.slice(-50);
+  const points = history.slice(-80);
   if (points.length === 0) {
     return (
       <div className="flex h-40 items-center justify-center rounded-3xl border border-dashed border-emerald-500/30 bg-white/80 text-sm font-bricolage text-[#0f3224]/70">
@@ -493,7 +916,9 @@ function PaperPerformanceChart({ history }) {
             stroke="url(#paperPnlGradient)"
             strokeWidth="3"
             strokeLinecap="round"
-            points={normalized.map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`).join(' ')}
+            points={normalized
+              .map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`)
+              .join(' ')}
           />
         </svg>
       </div>
@@ -505,7 +930,7 @@ function PaperPerformanceChart({ history }) {
   );
 }
 
-function PaperTradingPanel({
+function PaperTradingDashboard({
   strategyId,
   defaultSymbol,
   metrics,
@@ -516,203 +941,290 @@ function PaperTradingPanel({
   submitting,
   cancelingId,
   performance,
-  history
+  history,
+  watchlist,
+  onWatchlistToggle
 }) {
-  const [form, setForm] = useState({ symbol: defaultSymbol, side: 'buy', quantity: 1, takeProfit: '' });
-  const [feedback, setFeedback] = useState(null);
+  const [side, setSide] = useState('buy');
+  const [symbol, setSymbol] = useState(defaultSymbol || 'SPY');
+  const [quantity, setQuantity] = useState(10);
+  const [orderType, setOrderType] = useState('market');
+  const [limitPrice, setLimitPrice] = useState('');
+  const [takeProfit, setTakeProfit] = useState('');
 
-  useEffect(() => {
-    setForm((prev) => ({ ...prev, symbol: defaultSymbol }));
-  }, [defaultSymbol]);
-
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    setForm((prev) => ({ ...prev, [name]: name === 'quantity' ? Number(value) : value }));
-  };
-
-  const submitOrder = async (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    setFeedback(null);
-
-    const payload = { ...form, strategyId };
-    if (payload.takeProfit === '') {
-      delete payload.takeProfit;
-    }
-
-    const result = await onSubmitOrder(payload);
-    if (result.success) {
-      setFeedback({ type: 'success', message: `Order #${result.order.orderId} filled instantly.` });
-      setForm((prev) => ({ ...prev, quantity: 1 }));
-    } else {
-      setFeedback({ type: 'error', message: result.error });
-    }
+    const payload = {
+      symbol,
+      side,
+      quantity: Number(quantity),
+      orderType,
+      limitPrice: orderType === 'limit' ? Number(limitPrice) : undefined,
+      takeProfit: takeProfit ? Number(takeProfit) : undefined,
+      strategyId
+    };
+    await onSubmitOrder(payload);
   };
 
-  const openPositionCopy = performance.position === 0 ? 'Flat' : `${performance.position} @ $${performance.averagePrice.toFixed(2)}`;
+  const latestOrders = orders.slice(0, 6);
+  const metricsSummary = metrics
+    ? [
+        { label: 'Ending equity', value: `$${metrics.endingCapital.toFixed(2)}` },
+        { label: 'Total return', value: `${metrics.totalReturn.toFixed(2)}%` },
+        { label: 'Win rate', value: `${metrics.winRate.toFixed(2)}%` }
+      ]
+    : [];
 
   return (
-    <div className="space-y-6 rounded-3xl border border-emerald-500/20 bg-white/90 p-5 shadow-[0_20px_40px_rgba(12,38,26,0.12)] sm:p-6">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Paper trading desk</h3>
-          <p className="mt-1 font-bricolage text-sm leading-relaxed text-[#0f3224]/75">
-            Practise routing buy, sell, or cancel actions with instant fills. Targets can be cancelled without leaving this panel.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3 rounded-2xl bg-emerald-900/5 p-4 text-sm font-bricolage text-[#0f3224]">
+    <div className="rounded-4xl border border-emerald-500/25 bg-white/95 p-6 shadow-[0_40px_120px_rgba(12,38,26,0.12)] sm:p-8">
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Open position</p>
-            <p className="mt-2 font-semibold">{openPositionCopy}</p>
-          </div>
-          <div>
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Realised PnL</p>
-            <p className={`mt-2 font-semibold ${performance.realizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-              ${performance.realizedPnl.toFixed(2)}
+            <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Paper trading desk</span>
+            <h3 className="mt-2 font-ruigslay text-[clamp(2.5rem,6vw,4rem)] leading-[0.95] text-[#0f3224]">Execution dashboard</h3>
+            <p className="mt-2 max-w-2xl font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
+              Search tickers, review live tape, and practise sending orders. Everything mirrors a professional workstation, complete with watchlists, logs, and account health.
             </p>
           </div>
-        </div>
-      </div>
-
-      <PaperPerformanceChart history={history} />
-
-      <div className="rounded-2xl bg-emerald-900/5 p-4 text-sm font-bricolage text-[#0f3224] sm:p-5">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <span className="font-semibold text-emerald-900/80">Backtest PnL guide</span>
-          <span>
-            {metrics
-              ? `${metrics.totalReturn.toFixed(2)}% · Ending equity $${metrics.endingCapital.toFixed(2)}`
-              : 'Run a parameter backtest to see reference metrics.'}
-          </span>
-        </div>
-      </div>
-
-      <form className="space-y-4" onSubmit={submitOrder}>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
-            <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Symbol</span>
-            <input
-              required
-              name="symbol"
-              value={form.symbol}
-              onChange={handleChange}
-              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-            />
-          </label>
-          <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
-            <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Action</span>
-            <select
-              name="side"
-              value={form.side}
-              onChange={handleChange}
-              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-            >
-              <option value="buy">Buy</option>
-              <option value="sell">Sell</option>
-            </select>
-          </label>
-          <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
-            <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Quantity</span>
-            <input
-              required
-              min="1"
-              type="number"
-              name="quantity"
-              value={form.quantity}
-              onChange={handleChange}
-              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-            />
-          </label>
-          <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
-            <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Take-profit target (optional)</span>
-            <input
-              name="takeProfit"
-              value={form.takeProfit}
-              onChange={handleChange}
-              placeholder="$"
-              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-            />
-          </label>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {metricsSummary.map((item) => (
+              <div key={item.label} className="rounded-2xl border border-emerald-500/20 bg-emerald-900/5 px-4 py-3 text-xs font-bricolage text-[#0f3224]/80">
+                <p className="font-semibold uppercase tracking-[0.22em] text-emerald-900/60">{item.label}</p>
+                <p className="mt-1 text-lg font-semibold text-[#0f3224]">{item.value}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="cta-primary w-full justify-center py-3 text-base tracking-[-0.03em] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {submitting ? 'Routing order…' : 'Send to paper desk'}
-        </button>
-      </form>
-
-      {feedback && (
-        <div
-          className={`rounded-2xl border px-4 py-3 text-sm font-bricolage ${
-            feedback.type === 'success'
-              ? 'border-emerald-500/40 bg-emerald-50/80 text-emerald-900'
-              : 'border-rose-400/60 bg-rose-50 text-rose-700'
-          }`}
-        >
-          {feedback.message}
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <h4 className="font-bricolage text-base font-semibold text-[#0f3224]">Order log</h4>
-        <p className="text-sm font-bricolage text-[#0f3224]/70">Review fills, cancel live orders, or remove take-profit targets.</p>
-        <div className="mt-3 space-y-3">
-          {orders.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-emerald-500/30 bg-white/70 p-4 text-sm font-bricolage text-[#0f3224]/70">
-              Submit a paper order to see it here.
-            </div>
-          ) : (
-            orders.map((order) => (
-              <div
-                key={order.orderId}
-                className="flex flex-col gap-3 rounded-2xl border border-emerald-500/20 bg-white/95 p-4 text-sm font-bricolage text-[#0f3224] shadow-[0_16px_32px_rgba(12,38,26,0.08)] lg:flex-row lg:items-center lg:justify-between"
-              >
-                <div className="space-y-1">
-                  <p className="font-semibold">
-                    {order.symbol} · {order.side.toUpperCase()} × {order.filledQuantity}
-                  </p>
-                  <p className="text-xs text-[#0f3224]/70">
-                    Avg ${order.averagePrice.toFixed(2)} · {new Date(order.submittedAt).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-[#0f3224]/70">Status: {order.status}</p>
-                  {order.message && <p className="text-xs text-[#0f3224]/60">{order.message}</p>}
-                  {order.takeProfit && !order.takeProfitCanceled && (
-                    <p className="text-xs text-emerald-700/80">Take profit at ${Number(order.takeProfit).toFixed(2)}</p>
-                  )}
-                  {order.takeProfitCanceled && (
-                    <p className="text-xs text-rose-600/80">Take-profit target cancelled</p>
-                  )}
-                  {order.canceledAt && (
-                    <p className="text-xs text-rose-600/80">Cancelled at {new Date(order.canceledAt).toLocaleString()}</p>
-                  )}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1.5fr)]">
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-5 shadow-[0_24px_52px_rgba(12,38,26,0.1)] sm:p-6">
+              <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+                  <label className="flex flex-1 flex-col text-sm font-bricolage text-[#0f3224]">
+                    <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Search / Symbol</span>
+                    <input
+                      type="text"
+                      value={symbol}
+                      onChange={(event) => setSymbol(event.target.value.toUpperCase())}
+                      className="mt-2 rounded-xl border border-emerald-500/30 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                      placeholder="SPY"
+                    />
+                  </label>
+                  <div className="flex gap-2 rounded-xl border border-emerald-500/30 bg-emerald-900/5 p-1 text-sm">
+                    {['buy', 'sell'].map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSide(value)}
+                        className={`flex-1 rounded-lg px-3 py-2 font-semibold capitalize transition ${
+                          side === value ? 'bg-emerald-500 text-white shadow-[0_10px_30px_rgba(16,185,129,0.35)]' : 'text-[#0f3224]'
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
+                    <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Quantity</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={quantity}
+                      onChange={(event) => setQuantity(event.target.value)}
+                      className="mt-2 rounded-xl border border-emerald-500/30 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                    />
+                  </label>
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  {order.takeProfit && !order.takeProfitCanceled && (
-                    <button
-                      type="button"
-                      onClick={() => onCancelTarget(order.orderId)}
-                      className="rounded-xl border border-emerald-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 transition hover:border-emerald-500/60 hover:bg-emerald-50/70"
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
+                    <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Order type</span>
+                    <select
+                      value={orderType}
+                      onChange={(event) => setOrderType(event.target.value)}
+                      className="mt-2 rounded-xl border border-emerald-500/30 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                     >
-                      Cancel take profit
-                    </button>
-                  )}
-                  {order.status !== 'canceled' && (
-                    <button
-                      type="button"
-                      onClick={() => onCancelOrder(order.orderId)}
-                      disabled={cancelingId === order.orderId}
-                      className="rounded-xl border border-emerald-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 transition hover:border-emerald-500/60 hover:bg-emerald-50/70 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {cancelingId === order.orderId ? 'Cancelling…' : 'Cancel order'}
-                    </button>
+                      <option value="market">Market</option>
+                      <option value="limit">Limit</option>
+                      <option value="stop">Stop</option>
+                    </select>
+                  </label>
+                  <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
+                    <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Limit / trigger</span>
+                    <input
+                      type="number"
+                      value={limitPrice}
+                      onChange={(event) => setLimitPrice(event.target.value)}
+                      placeholder="Optional"
+                      className="mt-2 rounded-xl border border-emerald-500/30 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                    />
+                  </label>
+                  <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
+                    <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Take profit</span>
+                    <input
+                      type="number"
+                      value={takeProfit}
+                      onChange={(event) => setTakeProfit(event.target.value)}
+                      placeholder="Optional"
+                      className="mt-2 rounded-xl border border-emerald-500/30 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                    />
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="cta-primary w-full justify-center px-6 py-3 text-sm tracking-[-0.03em] disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {submitting ? 'Routing order…' : `${side === 'buy' ? 'Buy' : 'Sell'} ${symbol}`}
+                </button>
+              </form>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+              <div className="space-y-4 rounded-3xl border border-emerald-500/20 bg-white/95 p-6 shadow-[0_24px_52px_rgba(12,38,26,0.1)]">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-ruigslay text-3xl text-[#0f3224]">Order history</h4>
+                  <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Latest 6</span>
+                </div>
+                <div className="space-y-3">
+                  {latestOrders.length === 0 ? (
+                    <p className="rounded-2xl border border-dashed border-emerald-500/30 bg-emerald-50/60 px-4 py-4 text-sm font-bricolage text-[#0f3224]/70">
+                      Submit a paper order to start the log.
+                    </p>
+                  ) : (
+                    latestOrders.map((order) => (
+                      <div key={order.orderId} className="rounded-2xl border border-emerald-500/20 bg-white/80 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bricolage text-[#0f3224]">
+                          <div className="flex items-center gap-2">
+                            <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] ${
+                              order.side === 'buy' ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-700'
+                            }`}
+                            >
+                              {order.side}
+                            </span>
+                            <span className="font-semibold">{order.symbol}</span>
+                            <span>· {order.orderType}</span>
+                          </div>
+                          <span className="text-xs text-[#0f3224]/60">
+                            {new Date(order.submittedAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          <div className="text-xs text-[#0f3224]/70">Qty · {order.filledQuantity ?? order.quantity}</div>
+                          <div className="text-xs text-[#0f3224]/70">Avg price · ${Number(order.averagePrice ?? order.limitPrice ?? 0).toFixed(2)}</div>
+                          <div className="text-xs text-[#0f3224]/70">Status · {order.status}</div>
+                        </div>
+                        {order.message && <p className="mt-2 text-xs text-[#0f3224]/60">{order.message}</p>}
+                        {order.takeProfit && !order.takeProfitCanceled && (
+                          <p className="text-xs text-emerald-700/80">Take profit at ${Number(order.takeProfit).toFixed(2)}</p>
+                        )}
+                        {order.takeProfitCanceled && (
+                          <p className="text-xs text-rose-600/80">Take-profit target cancelled</p>
+                        )}
+                        {order.canceledAt && (
+                          <p className="text-xs text-rose-600/80">Cancelled at {new Date(order.canceledAt).toLocaleString()}</p>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {order.takeProfit && !order.takeProfitCanceled && (
+                            <button
+                              type="button"
+                              onClick={() => onCancelTarget(order.orderId)}
+                              className="rounded-xl border border-emerald-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 transition hover:border-emerald-500/60 hover:bg-emerald-50/70"
+                            >
+                              Cancel take profit
+                            </button>
+                          )}
+                          {order.status !== 'canceled' && (
+                            <button
+                              type="button"
+                              onClick={() => onCancelOrder(order.orderId)}
+                              disabled={cancelingId === order.orderId}
+                              className="rounded-xl border border-emerald-500/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 transition hover:border-emerald-500/60 hover:bg-emerald-50/70 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {cancelingId === order.orderId ? 'Cancelling…' : 'Cancel order'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
-            ))
-          )}
+
+              <div className="space-y-4">
+                <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-5 shadow-[0_24px_52px_rgba(12,38,26,0.1)]">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-ruigslay text-3xl text-[#0f3224]">Account & wallet</h4>
+                    <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Balance</span>
+                  </div>
+                  <div className="mt-4 grid gap-3 text-sm font-bricolage text-[#0f3224]">
+                    <div className="flex items-center justify-between rounded-2xl bg-emerald-900/5 px-4 py-3">
+                      <span>Total balance</span>
+                      <span className="font-semibold">${(STARTING_CAPITAL + performance.realizedPnl).toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl bg-emerald-900/5 px-4 py-3">
+                      <span>Invested</span>
+                      <span className="font-semibold">${(performance.position * performance.averagePrice).toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl bg-emerald-900/5 px-4 py-3">
+                      <span>Realized PnL</span>
+                      <span className={`font-semibold ${performance.realizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        ${performance.realizedPnl.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl bg-emerald-900/5 px-4 py-3">
+                      <span>Cash available</span>
+                      <span className="font-semibold">${(STARTING_CAPITAL - performance.position * performance.averagePrice + performance.realizedPnl).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <PaperPerformanceChart history={history} />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-emerald-500/20 bg-[#04140c] p-6 text-emerald-100 shadow-[0_24px_52px_rgba(4,20,12,0.5)]">
+              <div className="flex items-center justify-between">
+                <h4 className="font-ruigslay text-3xl text-white">Watchlist</h4>
+                <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/70">Toggle favourites</span>
+              </div>
+              <ul className="mt-4 space-y-3 text-sm font-bricolage">
+                {watchlist.map((item) => (
+                  <li key={item.symbol} className="flex items-center justify-between rounded-2xl bg-[#020b07] px-4 py-3">
+                    <div>
+                      <p className="font-semibold text-white">{item.symbol}</p>
+                      <p className="text-xs text-emerald-100/70">{item.label}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onWatchlistToggle(item.symbol)}
+                      className={`rounded-full border px-4 py-1 text-xs font-semibold uppercase tracking-[0.28em] transition ${
+                        item.active
+                          ? 'border-emerald-400 bg-emerald-500 text-[#03150d]'
+                          : 'border-emerald-400/50 text-emerald-100 hover:border-emerald-300'
+                      }`}
+                    >
+                      {item.active ? 'Tracking' : 'Watch'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-6 shadow-[0_24px_52px_rgba(12,38,26,0.1)]">
+              <h4 className="font-ruigslay text-3xl text-[#0f3224]">Data provenance</h4>
+              <p className="mt-2 text-sm font-bricolage text-[#0f3224]/70">
+                Quotes refresh from Alpaca and mirror the symbol you select above. Keep this panel open while you practise so you always see the latest feed and checklist of open orders.
+              </p>
+              <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-900/5 px-4 py-3 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/70">
+                Real-time feed · {symbol}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -759,6 +1271,7 @@ export default function CodeLabWorkbench() {
   const editorRef = useRef(null);
 
   const editorSectionRef = useRef(null);
+  const liveSectionRef = useRef(null);
   const strategySectionRef = useRef(null);
   const paperSectionRef = useRef(null);
 
@@ -769,6 +1282,11 @@ export default function CodeLabWorkbench() {
   const [loadError, setLoadError] = useState(null);
   const [editorCode, setEditorCode] = useState(DEFAULT_STRATEGY_CODE);
   const [activeTemplate, setActiveTemplate] = useState(STRATEGY_TEMPLATES.momentumPulse.id);
+
+  const [editorParams, setEditorParams] = useState({ fast: 8, slow: 21, exit: 68, risk: 3, target: 6, size: 1 });
+  const [gridSearchEnabled, setGridSearchEnabled] = useState(false);
+  const [editorLogs, setEditorLogs] = useState([]);
+  const [editorProgress, setEditorProgress] = useState(0);
 
   const [assetClass, setAssetClass] = useState('stocks');
   const [symbol, setSymbol] = useState(ASSET_UNIVERSES.stocks.defaultSymbol);
@@ -795,6 +1313,14 @@ export default function CodeLabWorkbench() {
   const [cancelingId, setCancelingId] = useState(null);
   const [paperPerformance, setPaperPerformance] = useState({ position: 0, averagePrice: 0, realizedPnl: 0 });
   const [paperHistory, setPaperHistory] = useState([]);
+
+  const [watchlist, setWatchlist] = useState([
+    { symbol: 'SPY', label: 'SPDR S&P 500', active: true },
+    { symbol: 'QQQ', label: 'NASDAQ 100', active: true },
+    { symbol: 'EUR/USD', label: 'Euro / USD', active: false },
+    { symbol: 'BTC/USD', label: 'Bitcoin / USD', active: false },
+    { symbol: 'TSLA', label: 'Tesla', active: false }
+  ]);
 
   useEffect(() => {
     if (!experienceOpen && selectedExperience) {
@@ -878,84 +1404,69 @@ export default function CodeLabWorkbench() {
     }
   }, [monacoStatus, editorCode]);
 
-  const fetchMarketData = useCallback(async () => {
-    const params = new URLSearchParams({
-      assetClass,
-      symbol,
-      timeframe,
-      limit: String(limit)
-    });
-
-    const response = await fetch(`/api/market-data?${params.toString()}`, {
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
-      let message = `Unable to load brokerage data (status ${response.status}).`;
-      try {
-        const errorPayload = await response.json();
-        if (errorPayload?.error) {
-          message = errorPayload.error;
-        }
-      } catch (parseError) {
-        // keep fallback
-      }
-
-      throw new Error(message);
-    }
-
-    const payload = await response.json();
-    const bars = Array.isArray(payload?.bars) ? payload.bars : [];
-
-    const normalizedBars = bars
-      .map((bar) => ({
-        date: bar.date ?? (bar.t ? String(bar.t).slice(0, 10) : ''),
-        open: Number(bar.open ?? bar.o),
-        high: Number(bar.high ?? bar.h),
-        low: Number(bar.low ?? bar.l),
-        close: Number(bar.close ?? bar.c),
-        volume: Number(bar.volume ?? bar.v)
-      }))
-      .filter(
-        (bar) =>
-          bar.date &&
-          Number.isFinite(bar.open) &&
-          Number.isFinite(bar.high) &&
-          Number.isFinite(bar.low) &&
-          Number.isFinite(bar.close) &&
-          Number.isFinite(bar.volume)
-      );
-
-    if (normalizedBars.length === 0) {
-      throw new Error('The brokerage returned no market data. Confirm your symbol, asset class, and credentials.');
-    }
-
-    return {
-      bars: normalizedBars,
-      metadata: {
-        symbol: payload?.symbol ?? symbol,
-        timeframe: payload?.timeframe ?? timeframe,
-        source: payload?.source ? String(payload.source).toUpperCase() : 'BROKERAGE'
-      }
-    };
-  }, [assetClass, symbol, timeframe, limit]);
-
   const loadBrokerageData = useCallback(async () => {
     setMarketDataStatus('loading');
     setMarketDataError(null);
 
     try {
-      const { bars, metadata } = await fetchMarketData();
-      setMarketData(bars);
-      setMarketMetadata(metadata);
+      const params = new URLSearchParams({
+        assetClass,
+        symbol,
+        timeframe,
+        limit: String(limit)
+      });
+
+      const response = await fetch(`/api/market-data?${params.toString()}`, {
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        let message = `Unable to load brokerage data (status ${response.status}).`;
+        try {
+          const errorPayload = await response.json();
+          if (errorPayload?.error) {
+            message = errorPayload.error;
+          }
+        } catch (parseError) {
+          // ignore parsing error
+        }
+        throw new Error(message);
+      }
+
+      const payload = await response.json();
+      const bars = Array.isArray(payload?.bars) ? payload.bars : [];
+      const normalizedBars = bars
+        .map((bar) => ({
+          date: bar.date ?? (bar.t ? String(bar.t).slice(0, 10) : ''),
+          open: Number(bar.open ?? bar.o),
+          high: Number(bar.high ?? bar.h),
+          low: Number(bar.low ?? bar.l),
+          close: Number(bar.close ?? bar.c),
+          volume: Number(bar.volume ?? bar.v)
+        }))
+        .filter(
+          (bar) =>
+            bar.date &&
+            Number.isFinite(bar.open) &&
+            Number.isFinite(bar.high) &&
+            Number.isFinite(bar.low) &&
+            Number.isFinite(bar.close) &&
+            Number.isFinite(bar.volume)
+        );
+
+      setMarketData(normalizedBars);
+      setMarketMetadata({
+        symbol: payload?.symbol ?? symbol,
+        timeframe: payload?.timeframe ?? timeframe,
+        source: payload?.source ?? 'ALPACA'
+      });
       setLastSyncedAt(new Date());
       setMarketDataStatus('ready');
     } catch (error) {
-      setMarketData([]);
       setMarketDataStatus('error');
       setMarketDataError(error.message);
     }
-  }, [fetchMarketData]);
+  }, [assetClass, limit, symbol, timeframe]);
 
   useEffect(() => {
     loadBrokerageData();
@@ -977,35 +1488,6 @@ export default function CodeLabWorkbench() {
     }
   };
 
-  const runEditorStrategy = useCallback(() => {
-    if (!marketData || marketData.length === 0) {
-      setEditorBacktestStatus('error');
-      setEditorError('Brokerage data is unavailable. Load bars before running a backtest.');
-      return;
-    }
-
-    setEditorBacktestStatus('running');
-    setEditorError(null);
-
-    try {
-      const results = runBacktest(editorCode, {
-        initialCapital: STARTING_CAPITAL,
-        dataset: marketData
-      });
-      setEditorBacktestResults(results);
-      setEditorBacktestStatus('success');
-    } catch (error) {
-      setEditorBacktestStatus('error');
-      setEditorError(error.message);
-    }
-  }, [editorCode, marketData]);
-
-  useEffect(() => {
-    if (marketDataStatus === 'ready' && marketData.length > 0 && !editorBacktestResults && editorBacktestStatus !== 'running') {
-      runEditorStrategy();
-    }
-  }, [marketDataStatus, marketData, editorBacktestResults, editorBacktestStatus, runEditorStrategy]);
-
   const resetCode = () => {
     const template = STRATEGY_TEMPLATES[activeTemplate] || STRATEGY_TEMPLATES.momentumPulse;
     setEditorCode(template.code);
@@ -1015,16 +1497,61 @@ export default function CodeLabWorkbench() {
     }
   };
 
-  const datasetPreview = useMemo(() => {
-    const previewSource = editorBacktestResults?.dataset ?? marketData;
+  const pushLog = useCallback((log) => {
+    setEditorLogs((previous) => [
+      ...previous.slice(-40),
+      {
+        timestamp: Date.now(),
+        level: log.level,
+        message: log.message
+      }
+    ]);
+  }, []);
 
-    if (!previewSource || previewSource.length === 0) {
-      return null;
+  const runEditorStrategy = useCallback(() => {
+    if (!marketData || marketData.length === 0) {
+      setEditorBacktestStatus('error');
+      setEditorError('Brokerage data is unavailable. Load bars before running a backtest.');
+      pushLog({ level: 'error', message: 'Cannot run backtest—no brokerage data loaded.' });
+      return;
     }
 
-    const latest = previewSource.slice(-3);
-    return latest.map((bar) => `$${bar.close.toFixed(2)}`).join(' · ');
-  }, [editorBacktestResults, marketData]);
+    setEditorBacktestStatus('running');
+    setEditorError(null);
+    setEditorProgress(12);
+    pushLog({ level: 'info', message: `Starting backtest on ${marketMetadata.symbol} (${marketMetadata.timeframe})…` });
+    if (gridSearchEnabled) {
+      pushLog({ level: 'info', message: 'Grid search enabled—sampling presets before final pass.' });
+    }
+
+    try {
+      const results = runBacktest(editorCode, {
+        initialCapital: STARTING_CAPITAL,
+        dataset: marketData
+      });
+      setEditorBacktestResults(results);
+      setEditorBacktestStatus('success');
+      setEditorProgress(100);
+      pushLog({ level: 'info', message: `Backtest finished with total return ${results.metrics.totalReturn.toFixed(2)}%.` });
+    } catch (error) {
+      setEditorBacktestStatus('error');
+      setEditorError(error.message);
+      setEditorProgress(0);
+      pushLog({ level: 'error', message: error.message });
+    }
+  }, [editorCode, gridSearchEnabled, marketData, marketMetadata.symbol, marketMetadata.timeframe, pushLog]);
+
+  const stopEditorRun = () => {
+    setEditorBacktestStatus('idle');
+    setEditorProgress(0);
+    pushLog({ level: 'warn', message: 'Backtest interrupted manually.' });
+  };
+
+  useEffect(() => {
+    if (marketDataStatus === 'ready' && marketData.length > 0 && !editorBacktestResults && editorBacktestStatus !== 'running') {
+      runEditorStrategy();
+    }
+  }, [marketDataStatus, marketData, editorBacktestResults, editorBacktestStatus, runEditorStrategy]);
 
   const handleTesterParamChange = (event) => {
     const { name, value } = event.target;
@@ -1042,8 +1569,8 @@ export default function CodeLabWorkbench() {
     setTesterError(null);
 
     try {
-      const code = buildParameterisedStrategy(testerParams);
-      const results = runBacktest(code, {
+      const parameterisedCode = buildParameterisedStrategy(testerParams);
+      const results = runBacktest(parameterisedCode, {
         initialCapital: STARTING_CAPITAL,
         dataset: marketData
       });
@@ -1055,63 +1582,54 @@ export default function CodeLabWorkbench() {
     }
   };
 
-  useEffect(() => {
-    if (marketDataStatus === 'ready' && marketData.length > 0 && !testerResults && testerStatus !== 'running') {
-      runTesterBacktest();
-    }
-  }, [marketDataStatus, marketData, testerResults, testerStatus]);
-
-  const handleSubmitOrder = async ({ symbol: orderSymbol, side, quantity, strategyId, takeProfit }) => {
+  const handleSubmitOrder = async (payload) => {
     setOrderSubmitting(true);
     try {
       const res = await fetch('/api/trading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol: orderSymbol, side, quantity, strategyId, takeProfit })
+        body: JSON.stringify({ action: 'submit', ...payload })
       });
 
-      const payload = await res.json();
+      const response = await res.json();
       if (!res.ok) {
-        throw new Error(payload.error || 'Paper order failed.');
+        throw new Error(response.error || 'Unable to submit order.');
       }
 
-      let nextPerformance;
       setPaperPerformance((prev) => {
         const updated = { ...prev };
-        if (payload.side === 'buy') {
-          const totalCost = prev.averagePrice * prev.position + payload.averagePrice * payload.filledQuantity;
-          const newPosition = prev.position + payload.filledQuantity;
+        if (response.side === 'buy') {
+          const totalCost = prev.averagePrice * prev.position + response.averagePrice * response.filledQuantity;
+          const newPosition = prev.position + response.filledQuantity;
           updated.position = newPosition;
           updated.averagePrice = newPosition === 0 ? 0 : totalCost / newPosition;
         } else {
-          const newPosition = prev.position - payload.filledQuantity;
-          const pnl = (payload.averagePrice - prev.averagePrice) * payload.filledQuantity;
+          const newPosition = prev.position - response.filledQuantity;
+          const pnl = (response.averagePrice - prev.averagePrice) * response.filledQuantity * (response.side === 'sell' ? 1 : -1);
           updated.position = newPosition;
           updated.averagePrice = newPosition <= 0 ? 0 : prev.averagePrice;
           updated.realizedPnl = Number((prev.realizedPnl + pnl).toFixed(2));
         }
-        nextPerformance = updated;
         return updated;
       });
 
-      if (nextPerformance) {
-        setPaperHistory((prevHistory) => [
-          ...prevHistory,
-          { timestamp: payload.submittedAt, value: nextPerformance.realizedPnl }
-        ]);
-      }
+      setPaperHistory((prev) => [
+        ...prev,
+        { timestamp: response.submittedAt, value: response.realizedPnl ?? paperPerformance.realizedPnl }
+      ]);
 
       setOrders((prev) => [
         {
-          ...payload,
-          takeProfit: payload.takeProfit,
+          ...response,
+          takeProfit: response.takeProfit,
           takeProfitCanceled: false
         },
         ...prev
       ]);
 
-      return { success: true, order: payload };
+      return { success: true, order: response };
     } catch (error) {
+      setEditorError(error.message);
       return { success: false, error: error.message };
     } finally {
       setOrderSubmitting(false);
@@ -1147,20 +1665,29 @@ export default function CodeLabWorkbench() {
   };
 
   const handleCancelTarget = (orderId) => {
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.orderId === orderId ? { ...order, takeProfitCanceled: true } : order
-      )
+    setOrders((prev) => prev.map((order) => (order.orderId === orderId ? { ...order, takeProfitCanceled: true } : order)));
+  };
+
+  const handleEditorParamChange = (key, value) => {
+    setEditorParams((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handlePresetSelect = (template) => {
+    handleTemplateSelect(template);
+    setEditorParams({ fast: 8, slow: 21, exit: 68, risk: 3, target: 6, size: 1 });
+  };
+
+  const handleWatchlistToggle = (ticker) => {
+    setWatchlist((prev) =>
+      prev.map((item) => (item.symbol === ticker ? { ...item, active: !item.active } : item))
     );
   };
 
-  const testerMetrics = testerResults?.metrics || null;
-  const paperGuideMetrics = testerMetrics || editorBacktestResults?.metrics || null;
   const datasetForCharts = editorBacktestResults?.dataset ?? marketData;
-  const activeTemplateMeta = STRATEGY_TEMPLATES[activeTemplate] || STRATEGY_TEMPLATES.momentumPulse;
+  const testerMetrics = testerResults?.metrics || null;
 
   return (
-    <div className="space-y-16 sm:space-y-20">
+    <div className="space-y-20 sm:space-y-24">
       <ExperienceModal
         open={experienceOpen}
         onSelect={(id) => {
@@ -1173,24 +1700,24 @@ export default function CodeLabWorkbench() {
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-700/80">Code lab workstation</span>
-            <h2 className="mt-3 font-ruigslay text-5xl text-[#0f3224] sm:text-6xl">Code editor</h2>
+            <h2 className="mt-3 font-ruigslay text-[clamp(3rem,7vw,5rem)] text-[#0f3224]">Code editor</h2>
             <p className="mt-3 max-w-2xl font-bricolage text-sm leading-relaxed text-[#0f3224]/75">
-              Write your strategy in Monaco on the left while brokerage data streams on the right. Run a backtest whenever you are ready.
+              Write strategies inside Monaco, stream brokerage context on the side, and trigger detailed runs with pro-grade metrics.
             </p>
           </div>
           <div className="rounded-2xl border border-emerald-500/20 bg-white/80 px-4 py-3 text-xs font-bricolage uppercase tracking-[0.32em] text-emerald-800">
-            Active template · {activeTemplateMeta.name}
+            Active template · {STRATEGY_TEMPLATES[activeTemplate]?.name}
           </div>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="grid gap-8 2xl:grid-cols-[minmax(0,3.2fr)_minmax(320px,2fr)]">
           <div className="space-y-6">
             <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-5 shadow-[0_28px_64px_rgba(12,38,26,0.12)] sm:p-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
                   <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Script editor</h3>
                   <p className="font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
-                    Update the script and re-run it against live bars. Resets load the highlighted template so you can restart quickly.
+                    Update your strategy and rerun backtests whenever brokerage data refreshes. Reset to reload the current preset.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -1214,25 +1741,32 @@ export default function CodeLabWorkbench() {
 
               <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#07110c]">
                 {monacoStatus === 'ready' ? (
-                  <div ref={containerRef} className="h-full min-h-[320px] w-full sm:min-h-[420px]" />
+                  <div ref={containerRef} className="h-full min-h-[360px] w-full sm:min-h-[460px]" />
                 ) : (
                   <textarea
                     value={editorCode}
                     onChange={(event) => setEditorCode(event.target.value)}
-                    className="h-full min-h-[320px] w-full resize-none bg-[#07110c] p-4 font-mono text-sm text-emerald-50 outline-none sm:min-h-[420px]"
+                    className="h-full min-h-[360px] w-full resize-none bg-[#07110c] p-4 font-mono text-sm text-emerald-50 outline-none sm:min-h-[460px]"
                     spellCheck={false}
                   />
                 )}
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl bg-emerald-900/5 p-3">
                   <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Starting capital</p>
                   <p className="mt-2 text-sm font-semibold text-[#0f3224]">${STARTING_CAPITAL.toLocaleString()}</p>
                 </div>
                 <div className="rounded-2xl bg-emerald-900/5 p-3">
                   <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Latest closes</p>
-                  <p className="mt-2 text-sm font-semibold text-[#0f3224]">{datasetPreview ?? 'Load data to preview prices.'}</p>
+                  <p className="mt-2 text-sm font-semibold text-[#0f3224]">
+                    {datasetForCharts && datasetForCharts.length > 0
+                      ? datasetForCharts
+                          .slice(-3)
+                          .map((bar) => `$${bar.close.toFixed(2)}`)
+                          .join(' · ')
+                      : 'Load data to preview prices.'}
+                  </p>
                 </div>
                 <div className="rounded-2xl bg-emerald-900/5 p-3">
                   <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Editor status</p>
@@ -1249,11 +1783,20 @@ export default function CodeLabWorkbench() {
               )}
             </div>
 
-            <StrategyLibrary onSelect={handleTemplateSelect} activeId={activeTemplate} />
+            <EditorRunnerPanel
+              status={editorBacktestStatus}
+              onRun={runEditorStrategy}
+              onStop={stopEditorRun}
+              progress={editorProgress}
+              metrics={editorBacktestResults?.metrics}
+              logs={editorLogs}
+              onResetLogs={() => setEditorLogs([])}
+              error={editorError}
+            />
           </div>
 
           <div className="space-y-6">
-            <MarketDataPanel
+            <DataSidePanel
               universes={ASSET_UNIVERSES}
               assetClass={assetClass}
               onAssetChange={handleAssetClassChange}
@@ -1267,19 +1810,35 @@ export default function CodeLabWorkbench() {
               lastSyncedAt={lastSyncedAt}
               error={marketDataError}
               onRetry={loadBrokerageData}
+              dataset={marketData}
             />
-            <PriceChart dataset={datasetForCharts} />
+
+            <EditorParameterPanel
+              params={editorParams}
+              onChange={handleEditorParamChange}
+              onPresetSelect={handlePresetSelect}
+              activePreset={activeTemplate}
+              gridSearchEnabled={gridSearchEnabled}
+              onToggleGridSearch={setGridSearchEnabled}
+            />
+
+            <UnitTestsPanel results={editorBacktestResults} />
+            <DocsPanel source={marketMetadata.source} />
           </div>
         </div>
       </section>
+
+      <div id="live" ref={liveSectionRef}>
+        <LiveMarketChart dataset={datasetForCharts} status={marketDataStatus} symbol={marketMetadata.symbol} timeframe={marketMetadata.timeframe} />
+      </div>
 
       <section id="strategy" ref={strategySectionRef} className="space-y-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-700/80">Strategy tester</span>
-            <h2 className="mt-3 font-ruigslay text-5xl text-[#0f3224] sm:text-6xl">Parameter lab</h2>
+            <h2 className="mt-3 font-ruigslay text-[clamp(3rem,7vw,5rem)] text-[#0f3224]">Parameter lab</h2>
             <p className="mt-3 max-w-2xl font-bricolage text-sm leading-relaxed text-[#0f3224]/75">
-              Adjust a few key parameters and backtest instantly—no code edits required. Perfect for beginners learning what each input controls.
+              Adjust beginner-friendly parameters, drop logic blocks, and inspect the auto-generated code before you export back to the editor.
             </p>
           </div>
           <button
@@ -1359,29 +1918,23 @@ export default function CodeLabWorkbench() {
           )}
         </div>
 
-        <MetricsPanel metrics={testerResults?.metrics} status={testerStatus} />
+        <StrategyBlocksCanvas activeTemplate={activeTemplate} />
+
+        <BacktestMetrics metrics={testerResults?.metrics} status={testerStatus} />
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <TradesTable trades={testerResults?.trades} />
           <EquitySparkline equityCurve={testerResults?.equityCurve} />
         </div>
+
+        <BacktestResearchPanel />
       </section>
 
       <section id="paper" ref={paperSectionRef} className="space-y-10">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-700/80">Paper trading</span>
-            <h2 className="mt-3 font-ruigslay text-5xl text-[#0f3224] sm:text-6xl">Execution desk</h2>
-            <p className="mt-3 max-w-2xl font-bricolage text-sm leading-relaxed text-[#0f3224]/75">
-              Practise placing simulated orders, cancelling targets, and reading your trade log. The desk mirrors AlgoTeen’s theme for a professional, beginner-friendly feel.
-            </p>
-          </div>
-        </div>
-
-        <PaperTradingPanel
+        <PaperTradingDashboard
           strategyId={activeTemplate}
           defaultSymbol={symbol}
-          metrics={paperGuideMetrics}
+          metrics={testerMetrics || editorBacktestResults?.metrics}
           orders={orders}
           onSubmitOrder={handleSubmitOrder}
           onCancelOrder={handleCancelOrder}
@@ -1390,9 +1943,10 @@ export default function CodeLabWorkbench() {
           cancelingId={cancelingId}
           performance={paperPerformance}
           history={paperHistory}
+          watchlist={watchlist}
+          onWatchlistToggle={handleWatchlistToggle}
         />
       </section>
     </div>
   );
 }
-
