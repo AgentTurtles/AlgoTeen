@@ -59,6 +59,40 @@ const SITE_SEARCH_INDEX = [
     href: '/learn#roadmap',
     sectionId: 'roadmap',
     description: 'Interactive trading and programming roadmap modules.'
+  },
+  {
+    id: 'codelab-page',
+    label: 'Code Lab Page',
+    href: '/codelab',
+    description: 'Enter the browser-based environment for coding and testing strategies.'
+  },
+  {
+    id: 'codelab-overview',
+    label: 'Code Lab · Overview',
+    href: '/codelab#overview',
+    sectionId: 'overview',
+    description: 'Hero banner introducing the Code Lab desk and quick links.'
+  },
+  {
+    id: 'codelab-editor',
+    label: 'Code Lab · Code Editor',
+    href: '/codelab#editor',
+    sectionId: 'editor',
+    description: 'Monaco editor paired with brokerage data and market chart.'
+  },
+  {
+    id: 'codelab-strategy',
+    label: 'Code Lab · Strategy Tester',
+    href: '/codelab#strategy',
+    sectionId: 'strategy',
+    description: 'Parameter-based tester for quick backtests without editing code.'
+  },
+  {
+    id: 'codelab-paper',
+    label: 'Code Lab · Paper Trading',
+    href: '/codelab#paper',
+    sectionId: 'paper',
+    description: 'Dedicated execution desk with PnL chart, order log, and cancellations.'
   }
 ];
 

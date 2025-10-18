@@ -223,9 +223,13 @@ export default function Home() {
                     Spin up algorithms in our browser editor, run historical tests, and track performance dashboards without leaving the safe practice environment.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4 code-cta-group">
-                    <button className="cta-primary px-7" style={{fontSize: '18px', letterSpacing: '-0.4px'}}>
+                    <Link
+                      href="/codelab"
+                      className="cta-primary px-7"
+                      style={{fontSize: '18px', letterSpacing: '-0.4px'}}
+                    >
                       Launch Code Lab
-                    </button>
+                    </Link>
                     <button className="cta-pill px-7" style={{fontSize: '18px', letterSpacing: '-0.4px'}}>
                       Explore Docs
                     </button>
