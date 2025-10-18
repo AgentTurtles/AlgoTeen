@@ -92,7 +92,7 @@ const SITE_SEARCH_INDEX = [
     label: 'Code Lab · Backtesting',
     href: '/codelab#backtesting',
     sectionId: 'backtesting',
-    description: 'Features for historical simulations and insight tracking.'
+    description: 'Historical simulations on Alpaca brokerage data with instant insight tracking.'
   },
   {
     id: 'codelab-trading-api',

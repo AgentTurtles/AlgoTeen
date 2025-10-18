@@ -1,11 +1,81 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DEFAULT_STRATEGY_CODE, STRATEGY_TEMPLATES, STARTING_CAPITAL, runBacktest } from '../../lib/backtester';
 import loadMonaco from '../../lib/monacoLoader';
 
 const templateList = Object.values(STRATEGY_TEMPLATES);
+
+function MarketDataPanel({ status, metadata, barsCount, lastSyncedAt, error, onRetry }) {
+  const syncing = status === 'loading';
+  const hasError = status === 'error';
+
+  const lastSyncedLabel = lastSyncedAt
+    ? new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      }).format(lastSyncedAt)
+    : '—';
+
+  let statusCopy = 'Ready for backtests.';
+
+  if (syncing) {
+    statusCopy = 'Loading real brokerage candles…';
+  } else if (hasError) {
+    statusCopy = 'Unable to load brokerage data. Fix the issue and try again.';
+  }
+
+  return (
+    <div className="rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-white via-emerald-50/50 to-white p-6 shadow-[0_24px_54px_rgba(12,38,26,0.1)]">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/70">Brokerage data feed</p>
+          <h3 className="mt-2 font-bricolage text-lg font-semibold text-[#0f3224]">
+            {metadata.symbol} · {metadata.timeframe}
+          </h3>
+          <p className="mt-1 text-sm font-bricolage text-[#0f3224]/70">{statusCopy}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={syncing}
+          className={`rounded-xl border px-4 py-2 text-sm font-bricolage transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 ${
+            syncing
+              ? 'cursor-not-allowed border-emerald-500/20 bg-emerald-50/60 text-emerald-900/40'
+              : 'border-emerald-500/40 bg-white text-emerald-900 hover:border-emerald-500/70 hover:bg-emerald-50/80'
+          }`}
+        >
+          {syncing ? 'Refreshing…' : 'Refresh data'}
+        </button>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl bg-emerald-900/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Bars loaded</p>
+          <p className="mt-2 text-xl font-semibold text-[#0f3224]">{barsCount ?? '—'}</p>
+        </div>
+        <div className="rounded-2xl bg-emerald-900/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Source</p>
+          <p className="mt-2 text-xl font-semibold text-[#0f3224]">{metadata.source}</p>
+        </div>
+        <div className="rounded-2xl bg-emerald-900/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Last synced</p>
+          <p className="mt-2 text-xl font-semibold text-[#0f3224]">{lastSyncedLabel}</p>
+        </div>
+      </div>
+
+      {hasError ? (
+        <p className="mt-4 rounded-2xl border border-rose-500/30 bg-rose-50/80 p-4 text-sm font-bricolage text-rose-700">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function StrategyLibrary({ onSelect, activeId }) {
   return (
@@ -283,6 +353,11 @@ export default function CodeLabWorkbench() {
   const [loadError, setLoadError] = useState(null);
   const [code, setCode] = useState(DEFAULT_STRATEGY_CODE);
   const [activeTemplate, setActiveTemplate] = useState(STRATEGY_TEMPLATES.momentumPulse.id);
+  const [marketData, setMarketData] = useState([]);
+  const [marketDataStatus, setMarketDataStatus] = useState('loading');
+  const [marketDataError, setMarketDataError] = useState(null);
+  const [marketMetadata, setMarketMetadata] = useState({ symbol: 'SPY', timeframe: '1Day', source: 'ALPACA' });
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [backtestStatus, setBacktestStatus] = useState('idle');
   const [backtestResults, setBacktestResults] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -349,6 +424,82 @@ export default function CodeLabWorkbench() {
     };
   }, []);
 
+  const fetchMarketData = useCallback(async () => {
+    const response = await fetch('/api/market-data?symbol=SPY&timeframe=1Day&limit=500', {
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      let message = `Unable to load brokerage data (status ${response.status}).`;
+      try {
+        const errorPayload = await response.json();
+        if (errorPayload?.error) {
+          message = errorPayload.error;
+        }
+      } catch (parseError) {
+        // Ignore parse failures and keep fallback message.
+      }
+
+      throw new Error(message);
+    }
+
+    const payload = await response.json();
+    const bars = Array.isArray(payload?.bars) ? payload.bars : [];
+
+    const normalizedBars = bars
+      .map((bar) => ({
+        date: bar.date ?? (bar.t ? String(bar.t).slice(0, 10) : ''),
+        open: Number(bar.open ?? bar.o),
+        high: Number(bar.high ?? bar.h),
+        low: Number(bar.low ?? bar.l),
+        close: Number(bar.close ?? bar.c),
+        volume: Number(bar.volume ?? bar.v)
+      }))
+      .filter(
+        (bar) =>
+          bar.date &&
+          Number.isFinite(bar.open) &&
+          Number.isFinite(bar.high) &&
+          Number.isFinite(bar.low) &&
+          Number.isFinite(bar.close) &&
+          Number.isFinite(bar.volume)
+      );
+
+    if (normalizedBars.length === 0) {
+      throw new Error('The brokerage returned no market data. Confirm your symbol and credentials.');
+    }
+
+    return {
+      bars: normalizedBars,
+      metadata: {
+        symbol: payload?.symbol ?? 'SPY',
+        timeframe: payload?.timeframe ?? '1Day',
+        source: payload?.source ? String(payload.source).toUpperCase() : 'BROKERAGE'
+      }
+    };
+  }, []);
+
+  const loadBrokerageData = useCallback(async () => {
+    setMarketDataStatus('loading');
+    setMarketDataError(null);
+
+    try {
+      const { bars, metadata } = await fetchMarketData();
+      setMarketData(bars);
+      setMarketMetadata(metadata);
+      setLastSyncedAt(new Date());
+      setMarketDataStatus('ready');
+    } catch (error) {
+      setMarketData([]);
+      setMarketDataStatus('error');
+      setMarketDataError(error.message);
+    }
+  }, [fetchMarketData]);
+
+  useEffect(() => {
+    loadBrokerageData();
+  }, [loadBrokerageData]);
+
   const handleTemplateSelect = (template) => {
     setActiveTemplate(template.id);
     setCode(template.code);
@@ -359,11 +510,24 @@ export default function CodeLabWorkbench() {
   };
 
   const runStrategy = () => {
+    if (marketDataStatus !== 'ready' || marketData.length === 0) {
+      setBacktestStatus('error');
+      setErrorMessage(
+        marketDataStatus === 'error'
+          ? marketDataError || 'Brokerage data is unavailable. Resolve the issue and try again.'
+          : 'Brokerage data is still loading. Please wait before running a backtest.'
+      );
+      return;
+    }
+
     setBacktestStatus('running');
     setErrorMessage(null);
 
     try {
-      const results = runBacktest(code, { initialCapital: STARTING_CAPITAL });
+      const results = runBacktest(code, {
+        initialCapital: STARTING_CAPITAL,
+        dataset: marketData
+      });
       setBacktestResults(results);
       setBacktestStatus('success');
     } catch (error) {
@@ -382,16 +546,29 @@ export default function CodeLabWorkbench() {
   };
 
   const datasetPreview = useMemo(() => {
-    if (!backtestResults?.dataset) {
+    const previewSource = backtestResults?.dataset ?? marketData;
+
+    if (!previewSource || previewSource.length === 0) {
       return null;
     }
 
-    const sample = backtestResults.dataset.slice(-5);
+    const sample = previewSource.slice(-5);
     return sample.map((bar) => `${bar.date}: ${bar.close.toFixed(2)}`).join(' · ');
-  }, [backtestResults]);
+  }, [backtestResults, marketData]);
+
+  const canRunBacktest = marketDataStatus === 'ready' && marketData.length > 0 && backtestStatus !== 'running';
 
   return (
     <div className="space-y-10">
+      <MarketDataPanel
+        status={marketDataStatus}
+        metadata={marketMetadata}
+        barsCount={marketData.length}
+        lastSyncedAt={lastSyncedAt}
+        error={marketDataError}
+        onRetry={loadBrokerageData}
+      />
+
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-3xl border border-emerald-500/20 bg-white/80 p-6 shadow-[0_28px_64px_rgba(12,38,26,0.12)]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -413,8 +590,8 @@ export default function CodeLabWorkbench() {
               <button
                 type="button"
                 onClick={runStrategy}
-                className="cta-primary px-5 py-2 text-sm tracking-[-0.03em]"
-                disabled={backtestStatus === 'running'}
+                className="cta-primary px-5 py-2 text-sm tracking-[-0.03em] disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={!canRunBacktest}
               >
                 {backtestStatus === 'running' ? 'Running…' : 'Run backtest'}
               </button>

@@ -30,7 +30,7 @@ const FEATURE_CARDS = [
   {
     title: 'One-click backtests',
     description:
-      'Run simulations against curated sample data, surface performance metrics, and review each trade with a single click.'
+      'Run simulations against real Alpaca market data pulled with your API keys, surface performance metrics, and review each trade with a single click.'
   },
   {
     title: 'Paper-ready workflows',
@@ -45,6 +45,10 @@ const WORKSPACE_FEATURES = [
     detail: 'Enjoy syntax highlighting, error surfacing, and instant updates while you iterate on each idea.'
   },
   {
+    label: 'Brokerage-grade data',
+    detail: 'Authenticate with Alpaca API keys to stream real OHLC candles directly into every backtest.'
+  },
+  {
     label: 'Built-in helpers',
     detail: 'Access EMA, SMA, RSI, and range utilities directly in your scripts—no need to wire indicators manually.'
   },
@@ -55,7 +59,7 @@ const WORKSPACE_FEATURES = [
 ];
 
 const BACKTEST_METRICS = [
-  { stat: '160', label: 'Sample OHLC bars packaged for testing' },
+  { stat: '500', label: 'Alpaca daily bars synced per request' },
   { stat: '10K', label: 'Starting equity for every simulation' },
   { stat: '6', label: 'Performance metrics calculated instantly' }
 ];
@@ -124,7 +128,7 @@ export default function CodeLabPageClient() {
                   Explore the desk
                 </Link>
                 <Link href="#backtesting" className="cta-pill px-8 text-lg tracking-[-0.04em]">
-                  Run a sample test
+                  Run a live test
                 </Link>
               </div>
 
@@ -178,7 +182,7 @@ export default function CodeLabPageClient() {
                   Code, backtest, and route orders without leaving the page
                 </h2>
                 <p className="mt-4 font-bricolage text-base leading-relaxed text-[#103224]/80">
-                  Experiment with Monaco-powered scripts, run instant backtests against our sample dataset, and tag your results before shipping signals to the paper trading API. Everything you need to validate an idea lives right here.
+                  Experiment with Monaco-powered scripts, sync real Alpaca candles through your credentials, and tag your results before shipping signals to the paper trading API. Everything you need to validate an idea lives right here.
                 </p>
               </div>
 

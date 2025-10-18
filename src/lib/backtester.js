@@ -1,5 +1,3 @@
-import SAMPLE_PRICE_DATA from '../data/samplePriceData';
-
 const STARTING_CAPITAL = 10000;
 
 const indicatorHelpers = {
@@ -98,9 +96,18 @@ function formatCurrency(value) {
   return Number(value.toFixed(2));
 }
 
-export function runBacktest(code, { initialCapital = STARTING_CAPITAL } = {}) {
+export function runBacktest(
+  code,
+  { initialCapital = STARTING_CAPITAL, dataset } = {}
+) {
   if (typeof code !== 'string' || code.trim().length === 0) {
     throw new Error('Strategy code must be a non-empty string.');
+  }
+
+  const priceData = Array.isArray(dataset) ? dataset : [];
+
+  if (priceData.length === 0) {
+    throw new Error('No brokerage market data is available. Load bars before running a backtest.');
   }
 
   let strategyFactory;
@@ -136,7 +143,7 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL } = {}) {
   let peakEquity = initialCapital;
   let maxDrawdown = 0;
 
-  SAMPLE_PRICE_DATA.forEach((bar, index) => {
+  priceData.forEach((bar, index) => {
     const state = {
       positionSize,
       entryPrice,
@@ -148,7 +155,7 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL } = {}) {
 
     try {
       decision = strategy({
-        data: SAMPLE_PRICE_DATA,
+        data: priceData,
         index,
         price: bar.close,
         bar,
@@ -208,7 +215,7 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL } = {}) {
   });
 
   if (positionSize > 0) {
-    const lastBar = SAMPLE_PRICE_DATA[SAMPLE_PRICE_DATA.length - 1];
+    const lastBar = priceData[priceData.length - 1];
     cash += lastBar.close * positionSize;
     const profit = (lastBar.close - entryPrice) * positionSize;
     const returnPct = indicatorHelpers.percentChange(lastBar.close, entryPrice);
@@ -219,7 +226,7 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL } = {}) {
       exitPrice: formatCurrency(lastBar.close),
       profit: formatCurrency(profit),
       returnPct,
-      exitNote: 'Auto-closed at end of sample'
+      exitNote: 'Auto-closed at end of dataset'
     });
 
     positionSize = 0;
@@ -235,7 +242,7 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL } = {}) {
     : 0;
 
   return {
-    dataset: SAMPLE_PRICE_DATA,
+    dataset: priceData,
     trades,
     equityCurve,
     metrics: {
