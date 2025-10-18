@@ -27,12 +27,12 @@ export default function CodeLabPageClient() {
 
         <main>
           <section id="overview" className="relative overflow-hidden text-white" style={{ backgroundColor: '#14C262' }}>
-            <div className="relative z-10 mx-auto max-w-6xl px-4 pb-28 pt-28 text-center">
+            <div className="relative z-10 mx-auto max-w-6xl px-4 pb-24 pt-24 text-center sm:px-6 lg:px-8 lg:pb-28 lg:pt-28">
               <span className="inline-flex items-center justify-center gap-2 rounded-full bg-white/15 px-5 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-white/90">
                 Code Lab
               </span>
 
-              <h1 className="mt-8 font-ruigslay text-[clamp(4rem,9vw,10rem)] font-semibold leading-[0.9] tracking-[-0.18em] drop-shadow-[0_20px_44px_rgba(9,30,18,0.35)]">
+              <h1 className="mt-8 font-ruigslay text-[clamp(3.5rem,10vw,8.5rem)] font-semibold leading-[0.88] tracking-[-0.16em] drop-shadow-[0_20px_44px_rgba(9,30,18,0.35)]">
                 Build · Test · Paper Trade
               </h1>
 

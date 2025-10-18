@@ -82,8 +82,8 @@ function MarketDataPanel({
   }
 
   return (
-    <div className="space-y-6 rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-white via-emerald-50/60 to-white p-6 shadow-[0_24px_54px_rgba(12,38,26,0.1)]">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+    <div className="space-y-6 rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-white via-emerald-50/60 to-white p-5 shadow-[0_24px_54px_rgba(12,38,26,0.1)] sm:p-6">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/70">Brokerage data feed</p>
           <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">
@@ -98,7 +98,7 @@ function MarketDataPanel({
             <select
               value={assetClass}
               onChange={(event) => onAssetChange(event.target.value)}
-              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 sm:w-48"
             >
               {Object.entries(universes).map(([key, value]) => (
                 <option key={key} value={key}>
@@ -113,7 +113,7 @@ function MarketDataPanel({
             <select
               value={symbol}
               onChange={(event) => onSymbolChange(event.target.value)}
-              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 sm:w-48"
             >
               {symbolOptions.map((option) => (
                 <option key={option.symbol} value={option.symbol}>
@@ -128,7 +128,7 @@ function MarketDataPanel({
             <select
               value={timeframe}
               onChange={(event) => onTimeframeChange(event.target.value)}
-              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 sm:w-40"
             >
               {timeframeOptions.map((frame) => (
                 <option key={frame} value={frame}>
@@ -142,7 +142,7 @@ function MarketDataPanel({
             type="button"
             onClick={onRetry}
             disabled={syncing}
-            className={`rounded-xl border px-4 py-2 text-sm font-bricolage transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 ${
+            className={`w-full rounded-xl border px-4 py-2 text-sm font-bricolage transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 sm:w-auto ${
               syncing
                 ? 'cursor-not-allowed border-emerald-500/20 bg-emerald-50/60 text-emerald-900/40'
                 : 'border-emerald-500/40 bg-white text-emerald-900 hover:border-emerald-500/70 hover:bg-emerald-50/80'
@@ -153,7 +153,7 @@ function MarketDataPanel({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-2xl bg-emerald-900/5 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Bars loaded</p>
           <p className="mt-2 text-xl font-semibold text-[#0f3224]">{barsCount ?? '—'}</p>
@@ -179,7 +179,7 @@ function MarketDataPanel({
 
 function StrategyLibrary({ onSelect, activeId }) {
   return (
-    <div className="rounded-3xl border border-emerald-500/20 bg-white/80 p-6 shadow-[0_18px_38px_rgba(12,38,26,0.12)] backdrop-blur">
+    <div className="rounded-3xl border border-emerald-500/20 bg-white/80 p-5 shadow-[0_18px_38px_rgba(12,38,26,0.12)] backdrop-blur sm:p-6">
       <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Starter strategies</h3>
       <p className="mt-2 font-bricolage text-sm leading-relaxed text-[#0f3224]/75">
         Load a template, tweak the numbers, and re-run. Each script is ready for beginners—comments show where to adjust risk and exits.
@@ -222,7 +222,7 @@ function MetricsPanel({ metrics, status }) {
   ];
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => (
         <div
           key={item.label}
@@ -259,7 +259,8 @@ function TradesTable({ trades }) {
 
   return (
     <div className="overflow-hidden rounded-3xl border border-emerald-500/20 bg-white/95 shadow-[0_24px_52px_rgba(12,38,26,0.1)]">
-      <table className="min-w-full divide-y divide-emerald-500/10">
+      <div className="max-h-[420px] w-full overflow-x-auto">
+        <table className="min-w-full divide-y divide-emerald-500/10">
         <thead className="bg-emerald-500/10">
           <tr className="text-left text-xs font-semibold uppercase tracking-[0.24em] text-emerald-900/75">
             <th className="px-4 py-3">Entry</th>
@@ -301,7 +302,8 @@ function TradesTable({ trades }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 }
@@ -322,9 +324,9 @@ function EquitySparkline({ equityCurve }) {
   const normalized = values.map((value) => ((value - min) / (max - min || 1)) * 100);
 
   return (
-    <div className="rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-white via-emerald-50/50 to-emerald-100/40 p-4 shadow-[0_18px_36px_rgba(12,38,26,0.08)]">
+    <div className="rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-white via-emerald-50/50 to-emerald-100/40 p-4 shadow-[0_18px_36px_rgba(12,38,26,0.08)] sm:p-5">
       <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Equity Curve</span>
-      <div className="mt-3 h-32 w-full rounded-2xl bg-[#0b2217] p-4">
+      <div className="mt-3 h-32 w-full rounded-2xl bg-[#0b2217] p-4 sm:h-36">
         <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="h-full w-full">
           <defs>
             <linearGradient id="equityGradient" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -365,14 +367,14 @@ function PriceChart({ dataset }) {
     : 'Waiting for live bars…';
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-emerald-500/25 bg-[#04140c] p-6 text-emerald-50 shadow-[0_26px_52px_rgba(4,20,12,0.45)]">
+    <div className="flex h-full min-h-[320px] flex-col rounded-2xl border border-emerald-500/25 bg-[#04140c] p-5 text-emerald-50 shadow-[0_26px_52px_rgba(4,20,12,0.45)] sm:min-h-[360px] sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <h3 className="font-ruigslay text-3xl leading-tight text-white">Live chart</h3>
         <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-200/70">Market tape</span>
       </div>
       <p className="mt-2 font-bricolage text-sm text-emerald-100/70">{rangeLabel}</p>
 
-      <div className="mt-4 h-52 w-full rounded-xl border border-emerald-500/20 bg-[#020b07] p-4">
+      <div className="mt-4 h-48 w-full rounded-xl border border-emerald-500/20 bg-[#020b07] p-4 sm:h-56 lg:h-60">
         {hasData ? (
           <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="h-full w-full">
             <defs>
@@ -436,7 +438,7 @@ function PaperTradingPanel({
   };
 
   return (
-    <div className="space-y-6 rounded-3xl border border-emerald-500/20 bg-white/90 p-6 shadow-[0_20px_40px_rgba(12,38,26,0.12)]">
+    <div className="space-y-6 rounded-3xl border border-emerald-500/20 bg-white/90 p-5 shadow-[0_20px_40px_rgba(12,38,26,0.12)] sm:p-6">
       <div className="flex flex-col gap-1">
         <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Paper trading desk</h3>
         <p className="font-bricolage text-sm leading-relaxed text-[#0f3224]/75">
@@ -444,7 +446,7 @@ function PaperTradingPanel({
         </p>
       </div>
 
-      <div className="rounded-2xl bg-emerald-900/5 p-4 text-sm font-bricolage text-[#0f3224]">
+      <div className="rounded-2xl bg-emerald-900/5 p-4 text-sm font-bricolage text-[#0f3224] sm:p-5">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <span className="font-semibold text-emerald-900/80">Backtest PnL</span>
           <span>
@@ -456,7 +458,7 @@ function PaperTradingPanel({
       </div>
 
       <form className="space-y-4" onSubmit={submitOrder}>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
             <span className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Symbol</span>
             <input
@@ -464,7 +466,7 @@ function PaperTradingPanel({
               name="symbol"
               value={form.symbol}
               onChange={handleChange}
-              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             />
           </label>
           <label className="flex flex-col text-sm font-bricolage text-[#0f3224]">
@@ -473,7 +475,7 @@ function PaperTradingPanel({
               name="side"
               value={form.side}
               onChange={handleChange}
-              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             >
               <option value="buy">Buy</option>
               <option value="sell">Sell</option>
@@ -488,7 +490,7 @@ function PaperTradingPanel({
               name="quantity"
               value={form.quantity}
               onChange={handleChange}
-              className="mt-2 rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              className="mt-2 w-full rounded-xl border border-emerald-500/30 bg-white px-3 py-2 text-sm text-[#0f3224] focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             />
           </label>
         </div>
@@ -863,7 +865,7 @@ export default function CodeLabWorkbench() {
   const activeTemplateMeta = STRATEGY_TEMPLATES[activeTemplate] || STRATEGY_TEMPLATES.momentumPulse;
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-10 sm:space-y-12">
       <MarketDataPanel
         universes={ASSET_UNIVERSES}
         assetClass={assetClass}
@@ -880,48 +882,48 @@ export default function CodeLabWorkbench() {
         onRetry={loadBrokerageData}
       />
 
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-8">
-          <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-6 shadow-[0_28px_64px_rgba(12,38,26,0.12)]">
-            <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+          <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-5 shadow-[0_28px_64px_rgba(12,38,26,0.12)] sm:p-6">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
               <div className="flex flex-1 flex-col">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1">
                     <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Strategy editor</h3>
                     <p className="font-bricolage text-sm leading-relaxed text-[#0f3224]/70">Update the script and rerun it against real bars without leaving the AlgoTeen chrome.</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
                     <button
                       type="button"
                       onClick={resetCode}
-                      className="rounded-xl border border-emerald-500/30 px-4 py-2 text-sm font-bricolage text-[#0f3224] transition hover:border-emerald-500/60 hover:bg-emerald-50/70"
+                      className="w-full rounded-xl border border-emerald-500/30 px-4 py-2 text-sm font-bricolage text-[#0f3224] transition hover:border-emerald-500/60 hover:bg-emerald-50/70 sm:w-auto"
                     >
                       Reset script
                     </button>
                     <button
                       type="button"
                       onClick={runStrategy}
-                      className="cta-primary px-5 py-2 text-sm tracking-[-0.03em] disabled:cursor-not-allowed disabled:opacity-70"
+                      className="cta-primary w-full justify-center px-5 py-2 text-sm tracking-[-0.03em] disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                       disabled={backtestStatus === 'running'}
                     >
                       {backtestStatus === 'running' ? 'Running…' : 'Run backtest'}
                     </button>
-                </div>
+                  </div>
 
                 <div className="mt-4 flex-1 overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#07110c]">
                   {monacoStatus === 'ready' ? (
-                    <div ref={containerRef} className="h-full w-full" />
+                    <div ref={containerRef} className="h-full min-h-[320px] w-full sm:min-h-[420px]" />
                   ) : (
                     <textarea
                       value={code}
                       onChange={(event) => setCode(event.target.value)}
-                      className="h-full w-full resize-none bg-[#07110c] p-4 font-mono text-sm text-emerald-50 outline-none"
+                      className="h-full min-h-[320px] w-full resize-none bg-[#07110c] p-4 font-mono text-sm text-emerald-50 outline-none sm:min-h-[420px]"
                       spellCheck={false}
                     />
                   )}
                 </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="rounded-2xl bg-emerald-900/5 p-3">
                     <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Starting capital</p>
                     <p className="mt-2 text-sm font-semibold text-[#0f3224]">${STARTING_CAPITAL.toLocaleString()}</p>
@@ -947,7 +949,7 @@ export default function CodeLabWorkbench() {
 
               <div className="flex w-full flex-col gap-4 xl:w-[420px]">
                 <PriceChart dataset={datasetForCharts} />
-                <div className="rounded-2xl border border-emerald-500/25 bg-white/85 p-4 shadow-[0_20px_40px_rgba(12,38,26,0.12)]">
+                <div className="rounded-2xl border border-emerald-500/25 bg-white/85 p-4 shadow-[0_20px_40px_rgba(12,38,26,0.12)] sm:p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Active template</p>
                   <p className="mt-2 font-bricolage text-sm font-semibold text-[#0f3224]">{activeTemplateMeta.name}</p>
                   <p className="mt-2 font-bricolage text-xs text-[#0f3224]/70">{backtestStatus === 'running' ? 'Backtest in progress…' : backtestResults ? 'Backtest ready—check the metrics below.' : 'Run a backtest once bars load.'}</p>
