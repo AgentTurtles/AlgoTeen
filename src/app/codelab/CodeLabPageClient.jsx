@@ -26,22 +26,18 @@ export default function CodeLabPageClient() {
         <SiteHeader navItems={NAV_ITEMS} searchItems={SITE_SEARCH_INDEX} />
 
         <main>
-          <section
-            id="overview"
-            className="relative overflow-hidden bg-gradient-to-br from-[#14C262] to-[#0ea351] text-white"
-          >
+          <section id="overview" className="relative overflow-hidden text-white" style={{ backgroundColor: '#14C262' }}>
             <div className="relative z-10 mx-auto max-w-6xl px-4 pb-28 pt-28 text-center">
-              <div className="inline-flex items-center justify-center gap-2 rounded-full bg-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-white/90">
+              <span className="inline-flex items-center justify-center gap-2 rounded-full bg-white/15 px-5 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-white/90">
                 Code Lab
-              </div>
+              </span>
 
-              <h1 className="mt-8 font-ruigslay text-[clamp(4rem,9vw,10rem)] font-semibold leading-[0.9] tracking-[-0.18em] drop-shadow-[0_22px_44px_rgba(10,30,18,0.35)]">
+              <h1 className="mt-8 font-ruigslay text-[clamp(4rem,9vw,10rem)] font-semibold leading-[0.9] tracking-[-0.18em] drop-shadow-[0_20px_44px_rgba(9,30,18,0.35)]">
                 Build · Test · Paper Trade
               </h1>
 
-              <p className="mx-auto mt-6 max-w-3xl font-bricolage text-lg leading-relaxed text-white/90">
-                Follow a simple path: pick a market, edit the script, watch the charts update, and practise routing paper orders.
-                Everything on this page mirrors the flow used across AlgoTeen—no surprises, just the tools you already know.
+              <p className="mx-auto mt-6 max-w-2xl font-bricolage text-lg leading-relaxed text-white/90">
+                The AlgoTeen desk: one room where you code the strategy, read the tape, and push paper orders with live brokerage data.
               </p>
 
               <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -58,22 +54,22 @@ export default function CodeLabPageClient() {
               </p>
             </div>
 
-            <div className="pointer-events-none absolute inset-0 opacity-15" aria-hidden="true">
-              <div className="h-full w-full bg-[radial-gradient(circle_at_15%_20%,rgba(255,255,255,0.6),transparent_55%),radial-gradient(circle_at_85%_20%,rgba(255,255,255,0.4),transparent_55%),radial-gradient(circle_at_50%_80%,rgba(255,255,255,0.35),transparent_60%)]" />
+            <div className="pointer-events-none absolute inset-0 opacity-20" aria-hidden="true">
+              <div className="h-full w-full bg-[radial-gradient(circle_at_20%_25%,rgba(255,255,255,0.4),transparent_55%),radial-gradient(circle_at_80%_30%,rgba(255,255,255,0.25),transparent_55%),radial-gradient(circle_at_50%_75%,rgba(255,255,255,0.2),transparent_60%)]" />
             </div>
           </section>
 
           <section id="desk" className="bg-[var(--surface-base)] py-24">
             <div className="mx-auto max-w-6xl px-4">
-              <div className="mx-auto max-w-3xl text-center">
+              <div className="mx-auto max-w-2xl text-center">
                 <span className="font-bricolage text-sm font-semibold uppercase tracking-[0.32em] text-emerald-700/80">
                   Trading desk
                 </span>
-                <h2 className="mt-4 font-ruigslay text-4xl leading-tight text-[#103224] drop-shadow-[0_18px_38px_rgba(16,50,36,0.2)] md:text-5xl">
-                  One screen for code, charts, and paper orders
+                <h2 className="mt-4 font-ruigslay text-4xl leading-tight text-[#103224] drop-shadow-[0_18px_38px_rgba(16,50,36,0.18)] md:text-5xl">
+                  Code the idea · Watch the market · Route the order
                 </h2>
                 <p className="mt-4 font-bricolage text-base leading-relaxed text-[#103224]/80">
-                  Work through three steady steps: choose your market (stocks, forex, or crypto), run the backtest to inspect the charts and PnL, then log buy, sell, or cancel actions in the paper desk. The layout matches AlgoTeen’s other pages so every control feels familiar.
+                  A single workstation with Monaco on the left, a live chart on the right, and a paper desk underneath—mirroring the rest of AlgoTeen’s flow.
                 </p>
               </div>
 

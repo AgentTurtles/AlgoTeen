@@ -350,48 +350,52 @@ function EquitySparkline({ equityCurve }) {
 }
 
 function PriceChart({ dataset }) {
-  const points = dataset?.slice(-150) ?? [];
+  const points = dataset?.slice(-180) ?? [];
+  const hasData = points.length > 0;
 
-  if (points.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-3xl border border-dashed border-emerald-500/30 bg-white/70 text-sm font-bricolage text-[#0f3224]/70">
-        Load market data to view recent price action.
-      </div>
-    );
-  }
+  const closes = hasData ? points.map((bar) => bar.close) : [];
+  const min = hasData ? Math.min(...closes) : null;
+  const max = hasData ? Math.max(...closes) : null;
+  const normalized = hasData
+    ? closes.map((value) => ((value - min) / (max - min || 1)) * 100)
+    : [];
 
-  const closes = points.map((bar) => bar.close);
-  const min = Math.min(...closes);
-  const max = Math.max(...closes);
-  const normalized = closes.map((value) => ((value - min) / (max - min || 1)) * 100);
+  const rangeLabel = hasData
+    ? `Last ${points.length} bars • Close range $${min.toFixed(2)} → $${max.toFixed(2)}`
+    : 'Waiting for live bars…';
 
   return (
-    <div className="rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-white via-white to-emerald-50/30 p-6 shadow-[0_20px_40px_rgba(12,38,26,0.08)]">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Price viewer</p>
-          <p className="mt-2 font-bricolage text-sm text-[#0f3224]/70">
-            Last {points.length} bars • Close range ${min.toFixed(2)} → ${max.toFixed(2)}
-          </p>
-        </div>
+    <div className="flex h-full flex-col rounded-2xl border border-emerald-500/25 bg-[#04140c] p-6 text-emerald-50 shadow-[0_26px_52px_rgba(4,20,12,0.45)]">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-ruigslay text-3xl leading-tight text-white">Live chart</h3>
+        <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-200/70">Market tape</span>
       </div>
+      <p className="mt-2 font-bricolage text-sm text-emerald-100/70">{rangeLabel}</p>
 
-      <div className="mt-4 h-48 w-full rounded-2xl bg-[#07110c] p-4">
-        <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="h-full w-full">
-          <defs>
-            <linearGradient id="priceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.9" />
-              <stop offset="100%" stopColor="#10b981" stopOpacity="0.2" />
-            </linearGradient>
-          </defs>
-          <polyline
-            fill="none"
-            stroke="url(#priceGradient)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            points={normalized.map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`).join(' ')}
-          />
-        </svg>
+      <div className="mt-4 h-52 w-full rounded-xl border border-emerald-500/20 bg-[#020b07] p-4">
+        {hasData ? (
+          <svg viewBox="0 0 200 100" preserveAspectRatio="none" className="h-full w-full">
+            <defs>
+              <linearGradient id="priceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#a7f3d0" stopOpacity="0.95" />
+                <stop offset="100%" stopColor="#34d399" stopOpacity="0.3" />
+              </linearGradient>
+            </defs>
+            <polyline
+              fill="none"
+              stroke="url(#priceGradient)"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              points={normalized
+                .map((value, index) => `${(index / (normalized.length - 1 || 1)) * 200},${100 - value}`)
+                .join(' ')}
+            />
+          </svg>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-emerald-500/30 text-sm font-bricolage text-emerald-100/60">
+            Load market data to view recent price action.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -856,6 +860,7 @@ export default function CodeLabWorkbench() {
   };
 
   const datasetForCharts = backtestResults?.dataset ?? marketData;
+  const activeTemplateMeta = STRATEGY_TEMPLATES[activeTemplate] || STRATEGY_TEMPLATES.momentumPulse;
 
   return (
     <div className="space-y-12">
@@ -875,64 +880,81 @@ export default function CodeLabWorkbench() {
         onRetry={loadBrokerageData}
       />
 
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-8">
-          <div className="rounded-3xl border border-emerald-500/20 bg-white/90 p-6 shadow-[0_28px_64px_rgba(12,38,26,0.12)]">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Strategy editor</h3>
-                <p className="font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
-                  Write JavaScript that returns trade signals through <code className="rounded bg-emerald-100/80 px-1">{'{ action }'}</code> objects.
-                  Helpers for EMA, SMA, RSI, and range scans are already imported.
-                </p>
+          <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-6 shadow-[0_28px_64px_rgba(12,38,26,0.12)]">
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+              <div className="flex flex-1 flex-col">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-1">
+                    <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Strategy editor</h3>
+                    <p className="font-bricolage text-sm leading-relaxed text-[#0f3224]/70">Update the script and rerun it against real bars without leaving the AlgoTeen chrome.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={resetCode}
+                      className="rounded-xl border border-emerald-500/30 px-4 py-2 text-sm font-bricolage text-[#0f3224] transition hover:border-emerald-500/60 hover:bg-emerald-50/70"
+                    >
+                      Reset script
+                    </button>
+                    <button
+                      type="button"
+                      onClick={runStrategy}
+                      className="cta-primary px-5 py-2 text-sm tracking-[-0.03em] disabled:cursor-not-allowed disabled:opacity-70"
+                      disabled={backtestStatus === 'running'}
+                    >
+                      {backtestStatus === 'running' ? 'Running…' : 'Run backtest'}
+                    </button>
+                </div>
+
+                <div className="mt-4 flex-1 overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#07110c]">
+                  {monacoStatus === 'ready' ? (
+                    <div ref={containerRef} className="h-full w-full" />
+                  ) : (
+                    <textarea
+                      value={code}
+                      onChange={(event) => setCode(event.target.value)}
+                      className="h-full w-full resize-none bg-[#07110c] p-4 font-mono text-sm text-emerald-50 outline-none"
+                      spellCheck={false}
+                    />
+                  )}
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-emerald-900/5 p-3">
+                    <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Starting capital</p>
+                    <p className="mt-2 text-sm font-semibold text-[#0f3224]">${STARTING_CAPITAL.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-900/5 p-3">
+                    <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Latest closes</p>
+                    <p className="mt-2 text-sm font-semibold text-[#0f3224]">{datasetPreview ?? 'Load data to preview prices.'}</p>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-900/5 p-3">
+                    <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Editor status</p>
+                    <p className="mt-2 text-sm font-semibold text-[#0f3224]">
+                      {monacoStatus === 'ready' ? 'Monaco loaded' : monacoStatus === 'loading' ? 'Loading Monaco…' : 'Fallback editor active'}
+                    </p>
+                  </div>
+                </div>
+
+                {(errorMessage || loadError) && (
+                  <div className="mt-4 rounded-2xl border border-rose-400/50 bg-rose-50/80 px-4 py-3 text-sm font-bricolage text-rose-700">
+                    {errorMessage || loadError}
+                  </div>
+                )}
               </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={resetCode}
-                  className="rounded-xl border border-emerald-500/30 px-4 py-2 text-sm font-bricolage text-[#0f3224] transition hover:border-emerald-500/60 hover:bg-emerald-50/70"
-                >
-                  Reset script
-                </button>
-                <button
-                  type="button"
-                  onClick={runStrategy}
-                  className="cta-primary px-5 py-2 text-sm tracking-[-0.03em] disabled:cursor-not-allowed disabled:opacity-70"
-                  disabled={backtestStatus === 'running'}
-                >
-                  {backtestStatus === 'running' ? 'Running…' : 'Run backtest'}
-                </button>
+
+              <div className="flex w-full flex-col gap-4 xl:w-[420px]">
+                <PriceChart dataset={datasetForCharts} />
+                <div className="rounded-2xl border border-emerald-500/25 bg-white/85 p-4 shadow-[0_20px_40px_rgba(12,38,26,0.12)]">
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Active template</p>
+                  <p className="mt-2 font-bricolage text-sm font-semibold text-[#0f3224]">{activeTemplateMeta.name}</p>
+                  <p className="mt-2 font-bricolage text-xs text-[#0f3224]/70">{backtestStatus === 'running' ? 'Backtest in progress…' : backtestResults ? 'Backtest ready—check the metrics below.' : 'Run a backtest once bars load.'}</p>
+                </div>
               </div>
             </div>
-
-            <div className="mt-4 h-[380px] overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#07110c]">
-              {monacoStatus === 'ready' ? (
-                <div ref={containerRef} className="h-full w-full" />
-              ) : (
-                <textarea
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                  className="h-full w-full resize-none bg-[#07110c] p-4 font-mono text-sm text-emerald-50 outline-none"
-                  spellCheck={false}
-                />
-              )}
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs font-bricolage text-[#0f3224]/70">
-              <span>Starting capital: ${STARTING_CAPITAL.toLocaleString()}</span>
-              {datasetPreview && <span>Latest closes · {datasetPreview}</span>}
-              {monacoStatus === 'loading' && <span>Loading Monaco editor…</span>}
-              {monacoStatus === 'unavailable' && <span className="text-emerald-700/80">Using basic text editor fallback.</span>}
-            </div>
-
-            {(errorMessage || loadError) && (
-              <div className="mt-4 rounded-2xl border border-rose-400/50 bg-rose-50/80 px-4 py-3 text-sm font-bricolage text-rose-700">
-                {errorMessage || loadError}
-              </div>
-            )}
           </div>
-
-          <PriceChart dataset={datasetForCharts} />
         </div>
 
         <div className="space-y-6">
