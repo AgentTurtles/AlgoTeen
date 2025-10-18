@@ -29,7 +29,7 @@ export async function POST(request) {
       });
     }
 
-    const { symbol, side, quantity, strategyId } = body;
+    const { symbol, side, quantity, strategyId, takeProfit } = body;
 
     if (!symbol || !side || !quantity) {
       return NextResponse.json(
@@ -55,6 +55,10 @@ export async function POST(request) {
     const submittedAt = new Date().toISOString();
     const price = buildMockPrice(symbol);
 
+    const numericTakeProfit = takeProfit !== undefined && takeProfit !== null && takeProfit !== ''
+      ? Number(takeProfit)
+      : null;
+
     return NextResponse.json({
       orderId: `paper-${Date.now().toString(36)}`,
       status: 'filled',
@@ -64,6 +68,7 @@ export async function POST(request) {
       symbol: symbol.toUpperCase(),
       side,
       strategyId: strategyId || null,
+      takeProfit: numericTakeProfit,
       message: 'Order filled against simulated market depth.'
     });
   } catch (error) {

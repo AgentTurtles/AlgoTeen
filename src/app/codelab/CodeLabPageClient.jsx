@@ -14,7 +14,9 @@ const CodeLabWorkbench = dynamic(() => import('../../components/codelab/CodeLabW
 
 const NAV_ITEMS = [
   { id: 'overview', label: 'OVERVIEW' },
-  { id: 'desk', label: 'DESK' }
+  { id: 'editor', label: 'CODE EDITOR' },
+  { id: 'strategy', label: 'STRATEGY TESTER' },
+  { id: 'paper', label: 'PAPER TRADING' }
 ];
 
 export default function CodeLabPageClient() {
@@ -41,8 +43,8 @@ export default function CodeLabPageClient() {
               </p>
 
               <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                <Link href="#desk" className="cta-primary px-8 text-lg tracking-[-0.04em]">
-                  Jump to the desk
+                <Link href="#editor" className="cta-primary px-8 text-lg tracking-[-0.04em]">
+                  Launch the desk
                 </Link>
                 <Link href="/learn" className="cta-pill px-8 text-lg tracking-[-0.04em]">
                   Review lessons
@@ -59,17 +61,17 @@ export default function CodeLabPageClient() {
             </div>
           </section>
 
-          <section id="desk" className="bg-[var(--surface-base)] py-24">
+          <section className="bg-[var(--surface-base)] py-24">
             <div className="mx-auto max-w-6xl px-4">
               <div className="mx-auto max-w-2xl text-center">
                 <span className="font-bricolage text-sm font-semibold uppercase tracking-[0.32em] text-emerald-700/80">
                   Trading desk
                 </span>
                 <h2 className="mt-4 font-ruigslay text-4xl leading-tight text-[#103224] drop-shadow-[0_18px_38px_rgba(16,50,36,0.18)] md:text-5xl">
-                  Code the idea · Watch the market · Route the order
+                  Code · Test · Trade—professionally
                 </h2>
                 <p className="mt-4 font-bricolage text-base leading-relaxed text-[#103224]/80">
-                  A single workstation with Monaco on the left, a live chart on the right, and a paper desk underneath—mirroring the rest of AlgoTeen’s flow.
+                  Pick your station below: edit the strategy, try quick parameter tweaks, or practise paper trades with matching AlgoTeen styling.
                 </p>
               </div>
 

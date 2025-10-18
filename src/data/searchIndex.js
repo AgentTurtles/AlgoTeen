@@ -74,11 +74,25 @@ const SITE_SEARCH_INDEX = [
     description: 'Hero banner introducing the Code Lab desk and quick links.'
   },
   {
-    id: 'codelab-desk',
-    label: 'Code Lab · Desk',
-    href: '/codelab#desk',
-    sectionId: 'desk',
-    description: 'Live editor, charting, and paper trading flow in one workspace.'
+    id: 'codelab-editor',
+    label: 'Code Lab · Code Editor',
+    href: '/codelab#editor',
+    sectionId: 'editor',
+    description: 'Monaco editor paired with brokerage data and market chart.'
+  },
+  {
+    id: 'codelab-strategy',
+    label: 'Code Lab · Strategy Tester',
+    href: '/codelab#strategy',
+    sectionId: 'strategy',
+    description: 'Parameter-based tester for quick backtests without editing code.'
+  },
+  {
+    id: 'codelab-paper',
+    label: 'Code Lab · Paper Trading',
+    href: '/codelab#paper',
+    sectionId: 'paper',
+    description: 'Dedicated execution desk with PnL chart, order log, and cancellations.'
   }
 ];
 
