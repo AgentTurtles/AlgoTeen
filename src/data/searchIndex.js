@@ -93,6 +93,19 @@ const SITE_SEARCH_INDEX = [
     href: '/codelab#paper',
     sectionId: 'paper',
     description: 'Dedicated execution desk with PnL chart, order log, and cancellations.'
+  },
+  {
+    id: 'paper-page',
+    label: 'Paper Trading Page',
+    href: '/paper-trading',
+    description: 'Practice trading with a guided watchlist → chart → ticket flow.'
+  },
+  {
+    id: 'paper-desk',
+    label: 'Paper Trading · Desk',
+    href: '/paper-trading#desk',
+    sectionId: 'desk',
+    description: 'Full-width chart workspace with positions rail, journaling, and risk tools.'
   }
 ];
 
