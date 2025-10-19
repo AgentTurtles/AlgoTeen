@@ -34,6 +34,13 @@ const SITE_SEARCH_INDEX = [
     description: 'Browser-based coding lab preview and feature summary.'
   },
   {
+    id: 'home-paper-trading',
+    label: 'Home · Paper Trading',
+    href: '/#paper',
+    sectionId: 'paper',
+    description: 'Overview of the simulated trading desk with guided watchlist → chart → ticket flow.'
+  },
+  {
     id: 'home-support',
     label: 'Home · Support',
     href: '/#support',

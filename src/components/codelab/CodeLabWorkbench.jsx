@@ -1466,8 +1466,9 @@ export default function CodeLabWorkbench() {
             />
           </div>
 
-          <ScrollShadowContainer className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-            <div className="space-y-6">
+          <div id="strategy">
+            <ScrollShadowContainer className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
+              <div className="space-y-6">
               <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-4">
                   <div>
@@ -1699,7 +1700,8 @@ export default function CodeLabWorkbench() {
 
               <DocsDrawer query={docsQuery} onQueryChange={setDocsQuery} />
             </div>
-          </ScrollShadowContainer>
+            </ScrollShadowContainer>
+          </div>
         </div>
       </div>
 
