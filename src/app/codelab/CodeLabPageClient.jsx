@@ -24,7 +24,7 @@ export default function CodeLabPageClient() {
     <>
       <GlobalStyles />
 
-      <div className="min-h-screen bg-[var(--surface-base)]" style={{ scrollBehavior: 'smooth' }}>
+      <div className="min-h-screen" style={{ scrollBehavior: 'smooth' }}>
         <SiteHeader navItems={NAV_ITEMS} searchItems={SITE_SEARCH_INDEX} />
 
         <main>
@@ -34,8 +34,11 @@ export default function CodeLabPageClient() {
                 Code Lab
               </span>
 
-              <h1 className="mt-8 font-ruigslay text-[clamp(3.5rem,10vw,8.5rem)] font-semibold leading-[0.88] tracking-[-0.16em] drop-shadow-[0_20px_44px_rgba(9,30,18,0.35)]">
-                Build · Test · Paper Trade
+              <h1
+                className="mt-8 font-ruigslay text-[clamp(1rem,10vw,15rem)] tracking-[-0.1em] drop-shadow-[0_20px_44px_rgba(9,30,18,0.35)] leading-[0.9] text-center"
+                style={{ fontFamily: 'Ruigslay, sans-serif' }}
+              >
+                BUILD & TEST
               </h1>
 
               <p className="mx-auto mt-6 max-w-2xl font-bricolage text-lg leading-relaxed text-white/90">
@@ -67,8 +70,9 @@ export default function CodeLabPageClient() {
                 <span className="font-bricolage text-sm font-semibold uppercase tracking-[0.32em] text-emerald-700/80">
                   Trading desk
                 </span>
-                <h2 className="mt-4 font-ruigslay text-4xl leading-tight text-[#103224] drop-shadow-[0_18px_38px_rgba(16,50,36,0.18)] md:text-5xl">
-                  Code · Test · Trade—professionally
+                <h2 className="mt-4 text-4xl leading-tight text-[#103224] drop-shadow-[0_18px_38px_rgba(16,50,36,0.18)] md:text-5xl"
+                style={{ fontFamily: 'Ruigslay, sans-serif' }}>
+                  Code·Test·Trade Professionally
                 </h2>
                 <p className="mt-4 font-bricolage text-base leading-relaxed text-[#103224]/80">
                   Pick your station below: edit the strategy, try quick parameter tweaks, or practise paper trades with matching AlgoTeen styling.

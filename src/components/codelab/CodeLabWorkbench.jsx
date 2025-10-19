@@ -91,14 +91,15 @@ const BLOCK_LIBRARY = [
 
 function ExperienceModal({ open, onSelect }) {
   if (!open) {
-    return null;
+     return null; // Updated to remove unnecessary braces
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[#03140b]/70 backdrop-blur" role="dialog" aria-modal="true">
-      <div className="mx-4 w-full max-w-3xl rounded-3xl border border-emerald-500/40 bg-white p-8 shadow-[0_40px_120px_rgba(4,20,12,0.6)] sm:p-10">
+    <div className="fixed inset-0 w-full h-full flex items-center justify-center z-50" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 w-full h-full z-50 bg-[#03140b]/70 backdrop-blur pointer-events-none" aria-hidden="true" />
+      <div className="relative z-50 mx-4 w-full max-w-3xl rounded-3xl border border-emerald-500/40 bg-white p-8 shadow-[0_40px_120px_rgba(4,20,12,0.6)] sm:p-10">
         <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Tailor your session</p>
-        <h2 className="mt-4 font-ruigslay text-4xl text-[#0f3224] sm:text-5xl">Where should we start?</h2>
+  <h2 className="mt-4 font-ruigslay text-4xl text-[#0f3224] sm:text-5xl" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Where should we start?</h2>
         <p className="mt-3 font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
           Choose the desk that matches your goal. You can always jump across sections using the sticky navigation.
         </p>
@@ -112,7 +113,7 @@ function ExperienceModal({ open, onSelect }) {
               className="group flex h-full flex-col rounded-2xl border border-emerald-500/40 bg-emerald-50/70 p-5 text-left transition hover:border-emerald-500/70 hover:bg-emerald-50 shadow-[0_22px_44px_rgba(12,38,26,0.12)]"
             >
               <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">{option.title}</span>
-              <span className="mt-3 font-ruigslay text-2xl text-[#0f3224] group-hover:text-emerald-700">{option.title}</span>
+              <span className="mt-3 font-ruigslay text-2xl text-[#0f3224] group-hover:text-emerald-700" style={{ fontFamily: 'Ruigslay, sans-serif' }}>{option.title}</span>
               <span className="mt-2 font-bricolage text-sm leading-relaxed text-[#0f3224]/70">{option.description}</span>
             </button>
           ))}
@@ -139,7 +140,7 @@ function EditorRunnerPanel({ status, onRun, onStop, progress, metrics, logs, onR
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Runner panel</p>
-          <h3 className="mt-2 font-ruigslay text-3xl leading-tight text-[#0f3224]">Backtest controls</h3>
+          <h3 className="mt-2 font-ruigslay text-3xl leading-tight text-[#0f3224]" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Backtest controls</h3>
           <p className="mt-2 max-w-lg font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
             Launch your script against the latest brokerage dataset, review real-time metrics, and monitor log output as the simulation progresses.
           </p>
@@ -273,7 +274,7 @@ function DataSidePanel({
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Data side panel</p>
-          <h3 className="mt-2 font-ruigslay text-3xl leading-tight text-[#0f3224]">
+          <h3 className="mt-2 font-ruigslay text-3xl leading-tight text-[#0f3224]" style={{ fontFamily: 'Ruigslay, sans-serif' }}>
             {metadata.symbol} · {metadata.timeframe}
           </h3>
           <p className="mt-2 font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
@@ -435,7 +436,7 @@ function EditorParameterPanel({ params, onChange, onPresetSelect, activePreset, 
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Parameter panel</p>
-            <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Strategy hyperparameters</h3>
+            <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Strategy hyperparameters</h3>
             <p className="mt-2 font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
               Tune core values and decide whether to enable grid search sweeps. Presets help beginners explore battle-tested combinations.
             </p>
@@ -522,7 +523,7 @@ function UnitTestsPanel({ results }) {
   return (
     <div className="rounded-3xl border border-emerald-500/25 bg-white/95 p-5 shadow-[0_22px_48px_rgba(12,38,26,0.1)] sm:p-6">
       <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Unit tests</p>
-      <h3 className="mt-2 font-ruigslay text-3xl text-[#0f3224]">Signal coverage</h3>
+  <h3 className="mt-2 font-ruigslay text-3xl text-[#0f3224]" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Signal coverage</h3>
       <ul className="mt-4 space-y-3">
         {tests.map((test) => (
           <li
@@ -546,7 +547,7 @@ function DocsPanel({ source }) {
   return (
     <div className="rounded-3xl border border-emerald-500/25 bg-gradient-to-br from-white via-emerald-50/80 to-white p-5 shadow-[0_20px_44px_rgba(12,38,26,0.1)] sm:p-6">
       <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Docs & SDK</p>
-      <h3 className="mt-2 font-ruigslay text-3xl text-[#0f3224]">In-app reference</h3>
+  <h3 className="mt-2 font-ruigslay text-3xl text-[#0f3224]" style={{ fontFamily: 'Ruigslay, sans-serif' }}>In-app reference</h3>
       <div className="mt-4 space-y-4 text-sm font-bricolage text-[#0f3224]/75">
         <div>
           <p className="font-semibold uppercase tracking-[0.22em] text-emerald-800">Events</p>
@@ -588,7 +589,7 @@ function LiveMarketChart({ dataset, status, symbol, timeframe }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-200/70">Live market chart</span>
-          <h2 className="mt-2 font-ruigslay text-[clamp(2.5rem,6vw,4rem)] leading-[0.95] text-white">Intraday tape</h2>
+          <h2 className="mt-2 font-ruigslay text-[clamp(2.5rem,6vw,4rem)] leading-[0.95] text-white" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Intraday tape</h2>
           <p className="mt-3 max-w-2xl font-bricolage text-sm text-emerald-100/80">{statusCopy}</p>
         </div>
         <div className="rounded-2xl border border-emerald-500/30 bg-[#042516] px-4 py-3 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">
@@ -773,7 +774,7 @@ function StrategyBlocksCanvas({ activeTemplate }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Visual builder</span>
-          <h3 className="mt-2 font-ruigslay text-4xl leading-tight text-[#0f3224]">Canvas & logic blocks</h3>
+          <h3 className="mt-2 font-ruigslay text-4xl leading-tight text-[#0f3224]" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Canvas & logic blocks</h3>
           <p className="mt-2 max-w-3xl font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
             Drag blocks to craft a signal. AlgoTeen compiles the flow into a read-only preview so you can confirm the generated code.
           </p>
@@ -858,7 +859,7 @@ function BacktestResearchPanel() {
   return (
     <div className="rounded-4xl border border-emerald-500/25 bg-white/95 p-6 shadow-[0_30px_80px_rgba(12,38,26,0.12)] sm:p-8">
       <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/60">Research suite</span>
-      <h3 className="mt-2 font-ruigslay text-4xl leading-tight text-[#0f3224]">Backtesting & analytics</h3>
+  <h3 className="mt-2 font-ruigslay text-4xl leading-tight text-[#0f3224]" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Backtesting & analytics</h3>
       <p className="mt-3 max-w-3xl font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
         AlgoTeen ships with professional analytics so beginners can understand every run. Review the highlights below to learn what the desk tracks automatically.
       </p>
@@ -900,7 +901,7 @@ function PaperPerformanceChart({ history }) {
   return (
     <div className="rounded-3xl border border-emerald-500/25 bg-[#03160d] p-5 text-emerald-100 shadow-[0_30px_60px_rgba(3,22,13,0.6)] sm:p-6">
       <div className="flex items-center justify-between">
-        <h4 className="font-ruigslay text-3xl text-white">Paper desk PnL</h4>
+  <h4 className="font-ruigslay text-3xl text-white" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Paper desk PnL</h4>
         <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-200/70">Real-time</span>
       </div>
       <div className="mt-4 h-40 w-full rounded-2xl bg-[#020b07] p-4">
@@ -1697,10 +1698,10 @@ export default function CodeLabWorkbench() {
       />
 
       <section id="editor" ref={editorSectionRef} className="space-y-10">
-        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-700/80">Code lab workstation</span>
-            <h2 className="mt-3 font-ruigslay text-[clamp(3rem,7vw,5rem)] text-[#0f3224]">Code editor</h2>
+            <h2 className="mt-3 text-[clamp(3rem,7vw,5rem)] text-[#0f3224]" style={{ fontFamily: 'Ruigslay, sans-serif' }}>Code editor</h2>
             <p className="mt-3 max-w-2xl font-bricolage text-sm leading-relaxed text-[#0f3224]/75">
               Write strategies inside Monaco, stream brokerage context on the side, and trigger detailed runs with pro-grade metrics.
             </p>
@@ -1710,10 +1711,33 @@ export default function CodeLabWorkbench() {
           </div>
         </div>
 
-        <div className="grid gap-8 2xl:grid-cols-[minmax(0,3.2fr)_minmax(320px,2fr)]">
-          <div className="space-y-6">
-            <div className="rounded-3xl border border-emerald-500/20 bg-white/95 p-5 shadow-[0_28px_64px_rgba(12,38,26,0.12)] sm:p-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-10 w-full lg:flex-row">
+          {/* Left sidebar: Data Side Panel */}
+          <div className="w-full lg:min-w-[320px] lg:max-w-[360px] lg:flex-shrink-0">
+            <div className="rounded-3xl border border-emerald-500/10 bg-gradient-to-br from-white via-emerald-50/60 to-white p-7 shadow-[0_8px_32px_rgba(12,38,26,0.10)]">
+              <DataSidePanel
+                universes={ASSET_UNIVERSES}
+                assetClass={assetClass}
+                onAssetChange={handleAssetClassChange}
+                symbol={symbol}
+                onSymbolChange={setSymbol}
+                timeframe={timeframe}
+                onTimeframeChange={setTimeframe}
+                status={marketDataStatus}
+                metadata={marketMetadata}
+                barsCount={marketData.length}
+                lastSyncedAt={lastSyncedAt}
+                error={marketDataError}
+                onRetry={loadBrokerageData}
+                dataset={marketData}
+              />
+            </div>
+          </div>
+
+          {/* Main editor workspace: code editor and runner combined */}
+          <div className="w-full flex-1 flex flex-col gap-8">
+            <div className="rounded-3xl border border-emerald-500/10 bg-gradient-to-br from-white via-emerald-50/60 to-white p-8 shadow-[0_12px_48px_rgba(12,38,26,0.13)]">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
                   <h3 className="font-ruigslay text-3xl leading-tight text-[#0f3224]">Script editor</h3>
                   <p className="font-bricolage text-sm leading-relaxed text-[#0f3224]/70">
@@ -1739,7 +1763,7 @@ export default function CodeLabWorkbench() {
                 </div>
               </div>
 
-              <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#07110c]">
+              <div className="mt-6 overflow-hidden rounded-2xl border border-emerald-500/10 bg-[#f6fff9]">
                 {monacoStatus === 'ready' ? (
                   <div ref={containerRef} className="h-full min-h-[360px] w-full sm:min-h-[460px]" />
                 ) : (
@@ -1752,7 +1776,21 @@ export default function CodeLabWorkbench() {
                 )}
               </div>
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {/* Backtest runner panel below code editor */}
+              <div className="mt-8">
+                <EditorRunnerPanel
+                  status={editorBacktestStatus}
+                  onRun={runEditorStrategy}
+                  onStop={stopEditorRun}
+                  progress={editorProgress}
+                  metrics={editorBacktestResults?.metrics}
+                  logs={editorLogs}
+                  onResetLogs={() => setEditorLogs([])}
+                  error={editorError}
+                />
+              </div>
+
+              <div className="mt-8 grid gap-4 sm:grid-cols-3">
                 <div className="rounded-2xl bg-emerald-900/5 p-3">
                   <p className="text-[0.7rem] font-semibold uppercase tracking-[0.28em] text-emerald-900/60">Starting capital</p>
                   <p className="mt-2 text-sm font-semibold text-[#0f3224]">${STARTING_CAPITAL.toLocaleString()}</p>
@@ -1777,53 +1815,31 @@ export default function CodeLabWorkbench() {
               </div>
 
               {(editorError || loadError) && (
-                <div className="mt-4 rounded-2xl border border-rose-400/50 bg-rose-50/80 px-4 py-3 text-sm font-bricolage text-rose-700">
+                <div className="mt-8 rounded-2xl border border-rose-400/40 bg-rose-50/80 px-5 py-4 text-sm font-bricolage text-rose-700 shadow-[0_2px_12px_rgba(244,63,94,0.08)]">
                   {editorError || loadError}
                 </div>
               )}
             </div>
-
-            <EditorRunnerPanel
-              status={editorBacktestStatus}
-              onRun={runEditorStrategy}
-              onStop={stopEditorRun}
-              progress={editorProgress}
-              metrics={editorBacktestResults?.metrics}
-              logs={editorLogs}
-              onResetLogs={() => setEditorLogs([])}
-              error={editorError}
-            />
           </div>
 
-          <div className="space-y-6">
-            <DataSidePanel
-              universes={ASSET_UNIVERSES}
-              assetClass={assetClass}
-              onAssetChange={handleAssetClassChange}
-              symbol={symbol}
-              onSymbolChange={setSymbol}
-              timeframe={timeframe}
-              onTimeframeChange={setTimeframe}
-              status={marketDataStatus}
-              metadata={marketMetadata}
-              barsCount={marketData.length}
-              lastSyncedAt={lastSyncedAt}
-              error={marketDataError}
-              onRetry={loadBrokerageData}
-              dataset={marketData}
-            />
-
-            <EditorParameterPanel
-              params={editorParams}
-              onChange={handleEditorParamChange}
-              onPresetSelect={handlePresetSelect}
-              activePreset={activeTemplate}
-              gridSearchEnabled={gridSearchEnabled}
-              onToggleGridSearch={setGridSearchEnabled}
-            />
-
-            <UnitTestsPanel results={editorBacktestResults} />
-            <DocsPanel source={marketMetadata.source} />
+          {/* Right sidebar: Parameters, Unit Tests, Docs */}
+          <div className="w-full lg:min-w-[320px] lg:max-w-[360px] lg:flex-shrink-0 flex flex-col gap-8">
+            <div className="rounded-3xl border border-emerald-500/10 bg-gradient-to-br from-white via-emerald-50/60 to-white p-7 shadow-[0_8px_32px_rgba(12,38,26,0.10)]">
+              <EditorParameterPanel
+                params={editorParams}
+                onChange={handleEditorParamChange}
+                onPresetSelect={handlePresetSelect}
+                activePreset={activeTemplate}
+                gridSearchEnabled={gridSearchEnabled}
+                onToggleGridSearch={setGridSearchEnabled}
+              />
+            </div>
+            <div className="rounded-3xl border border-emerald-500/10 bg-gradient-to-br from-white via-emerald-50/60 to-white p-7 shadow-[0_8px_32px_rgba(12,38,26,0.10)]">
+              <UnitTestsPanel results={editorBacktestResults} />
+            </div>
+            <div className="rounded-3xl border border-emerald-500/10 bg-gradient-to-br from-white via-emerald-50/60 to-white p-7 shadow-[0_8px_32px_rgba(12,38,26,0.10)]">
+              <DocsPanel source={marketMetadata.source} />
+            </div>
           </div>
         </div>
       </section>
