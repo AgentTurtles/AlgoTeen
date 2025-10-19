@@ -1,4 +1,5 @@
 const STARTING_CAPITAL = 10000;
+const riskFreeRate = 0.02;
 
 const indicatorHelpers = {
   sma(data, index, length) {
@@ -96,9 +97,23 @@ function formatCurrency(value) {
   return Number(value.toFixed(2));
 }
 
+const TIMEFRAME_TO_PERIODS_PER_YEAR = {
+  '1Day': 252,
+  '4Hour': 252 * 6,
+  '1Hour': 252 * 24,
+  '15Min': 252 * 24 * 4
+};
+
+const TIMEFRAME_TO_BARS_PER_DAY = {
+  '1Day': 1,
+  '4Hour': 6,
+  '1Hour': 24,
+  '15Min': 96
+};
+
 export function runBacktest(
   code,
-  { initialCapital = STARTING_CAPITAL, dataset } = {}
+  { initialCapital = STARTING_CAPITAL, dataset, timeframe = '1Day' } = {}
 ) {
   if (typeof code !== 'string' || code.trim().length === 0) {
     throw new Error('Strategy code must be a non-empty string.');
@@ -143,6 +158,13 @@ export function runBacktest(
   let peakEquity = initialCapital;
   let maxDrawdown = 0;
 
+  const returns = [];
+  const holdDurations = [];
+  let previousEquity = initialCapital;
+  let timeInMarket = 0;
+  let signalsTriggered = 0;
+  const actionsHit = new Set();
+
   priceData.forEach((bar, index) => {
     const state = {
       positionSize,
@@ -183,14 +205,21 @@ export function runBacktest(
           entryDate: bar.date,
           entryPrice: formatCurrency(bar.close),
           size,
-          entryNote: decision.note || 'Buy signal'
+          entryNote: decision.note || 'Buy signal',
+          entryIndex: index
         };
+        actionsHit.add('buy');
+        signalsTriggered += 1;
       }
 
       if ((action === 'sell' || action === 'exit') && positionSize > 0) {
         cash += bar.close * positionSize;
         const profit = (bar.close - entryPrice) * positionSize;
         const returnPct = indicatorHelpers.percentChange(bar.close, entryPrice);
+        const durationBars = openTrade?.entryIndex !== undefined ? index - openTrade.entryIndex : 0;
+        if (durationBars > 0) {
+          holdDurations.push(durationBars);
+        }
 
         trades.push({
           ...openTrade,
@@ -204,14 +233,23 @@ export function runBacktest(
         positionSize = 0;
         entryPrice = 0;
         openTrade = null;
+        actionsHit.add(action === 'sell' ? 'sell' : 'exit');
+        signalsTriggered += 1;
       }
     }
 
     const equity = cash + positionSize * bar.close;
     equityCurve.push({ date: bar.date, value: formatCurrency(equity) });
+    if (previousEquity !== 0) {
+      returns.push((equity - previousEquity) / previousEquity);
+    }
+    previousEquity = equity;
     peakEquity = Math.max(peakEquity, equity);
     const drawdown = (equity - peakEquity) / peakEquity;
     maxDrawdown = Math.min(maxDrawdown, drawdown);
+    if (positionSize > 0) {
+      timeInMarket += 1;
+    }
   });
 
   if (positionSize > 0) {
@@ -219,6 +257,10 @@ export function runBacktest(
     cash += lastBar.close * positionSize;
     const profit = (lastBar.close - entryPrice) * positionSize;
     const returnPct = indicatorHelpers.percentChange(lastBar.close, entryPrice);
+    const durationBars = openTrade?.entryIndex !== undefined ? priceData.length - openTrade.entryIndex - 1 : 0;
+    if (durationBars > 0) {
+      holdDurations.push(durationBars);
+    }
 
     trades.push({
       ...openTrade,
@@ -241,6 +283,54 @@ export function runBacktest(
     ? Number((trades.reduce((sum, trade) => sum + trade.returnPct, 0) / totalTrades).toFixed(2))
     : 0;
 
+  const periodsPerYear = TIMEFRAME_TO_PERIODS_PER_YEAR[timeframe] ?? 252;
+  const barsPerDay = TIMEFRAME_TO_BARS_PER_DAY[timeframe] ?? 1;
+  const years = priceData.length / periodsPerYear;
+  const totalReturnRatio = initialCapital === 0 ? 0 : finalEquity / initialCapital;
+  const cagr = years > 0 && totalReturnRatio > 0 ? (Math.pow(totalReturnRatio, 1 / years) - 1) * 100 : totalReturn;
+
+  const meanReturn = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
+  const variance = returns.length
+    ? returns.reduce((sum, value) => sum + (value - meanReturn) ** 2, 0) / returns.length
+    : 0;
+  const stdDev = Math.sqrt(Math.max(variance, 0));
+  const annualisedReturn = meanReturn * periodsPerYear;
+  const annualisedStd = stdDev * Math.sqrt(periodsPerYear);
+  const sharpe = annualisedStd ? (annualisedReturn - riskFreeRate) / annualisedStd : 0;
+
+  const downsideReturns = returns.filter((value) => value < 0);
+  const downsideMean = downsideReturns.length
+    ? downsideReturns.reduce((sum, value) => sum + value, 0) / downsideReturns.length
+    : 0;
+  const downsideVariance = downsideReturns.length
+    ? downsideReturns.reduce((sum, value) => sum + (value - downsideMean) ** 2, 0) / downsideReturns.length
+    : 0;
+  const downsideStd = Math.sqrt(Math.max(downsideVariance, 0));
+  const sortino = downsideStd ? (annualisedReturn - riskFreeRate) / (downsideStd * Math.sqrt(periodsPerYear)) : 0;
+
+  const avgHoldDays = holdDurations.length
+    ? Number((holdDurations.reduce((sum, value) => sum + value, 0) / holdDurations.length / barsPerDay).toFixed(2))
+    : 0;
+  const exposure = priceData.length
+    ? Number(((timeInMarket / priceData.length) * 100).toFixed(2))
+    : 0;
+
+  const actionLineMap = extractActionLineNumbers(code);
+  const coverageActions = Object.keys(actionLineMap).reduce((acc, action) => {
+    if (actionLineMap[action].length === 0) {
+      return acc;
+    }
+    acc[action] = {
+      hit: actionsHit.has(action),
+      lines: actionLineMap[action]
+    };
+    return acc;
+  }, {});
+
+  const uncoveredLineNumbers = Object.entries(coverageActions)
+    .filter(([, value]) => !value.hit)
+    .flatMap(([, value]) => value.lines);
+
   return {
     dataset: priceData,
     trades,
@@ -252,7 +342,18 @@ export function runBacktest(
       totalTrades,
       winRate,
       averageReturn,
-      maxDrawdown: Number((maxDrawdown * 100).toFixed(2))
+      maxDrawdown: Number((maxDrawdown * 100).toFixed(2)),
+      cagr: Number(cagr.toFixed(2)),
+      sharpe: Number(sharpe.toFixed(2)),
+      sortino: Number(sortino.toFixed(2)),
+      avgHoldDays,
+      exposure
+    },
+    coverage: {
+      bars: priceData.length,
+      signals: signalsTriggered,
+      actions: coverageActions,
+      uncoveredLineNumbers
     },
     generatedAt: new Date().toISOString()
   };
@@ -333,5 +434,29 @@ export const STRATEGY_TEMPLATES = {
 };
 
 export const DEFAULT_STRATEGY_CODE = STRATEGY_TEMPLATES.momentumPulse.code;
+
+function extractActionLineNumbers(code) {
+  const lines = String(code || '').split('\n');
+  const actions = {
+    buy: [],
+    sell: [],
+    exit: [],
+    short: []
+  };
+
+  lines.forEach((line, index) => {
+    const normalized = line.trim();
+    Object.keys(actions).forEach((action) => {
+      if (
+        normalized.includes(`'${action}'`) ||
+        normalized.includes(`"${action}"`)
+      ) {
+        actions[action].push(index + 1);
+      }
+    });
+  });
+
+  return actions;
+}
 
 export { indicatorHelpers as strategyHelpers, STARTING_CAPITAL };
