@@ -12,6 +12,16 @@ import WatchlistPanel from './WatchlistPanel';
 import { DAILY_LOSS_LIMITS, JOURNAL_TAGS, REALISM_LEVELS, WATCHLISTS } from './data';
 import { formatCurrency, generateSeries, getLocalStorageValue, roundTo, setLocalStorageValue } from './utils';
 
+const DEFAULT_LOT_SIZE = 100;
+
+const TIMEFRAME_PRESETS = [
+  { id: '1D', label: '1D', bars: 96 },
+  { id: '5D', label: '5D', bars: 96 * 5 },
+  { id: '1M', label: '1M', bars: 96 * 20 },
+  { id: '6M', label: '6M', bars: 96 * 40 },
+  { id: '1Y', label: '1Y', bars: 96 * 78 }
+];
+
 function useStickyState(key, defaultValue) {
   const [state, setState] = useState(() => getLocalStorageValue(key, defaultValue));
 
@@ -42,14 +52,34 @@ function deriveAccountSummary(positions, cash, priceLookup, startingBalance) {
 }
 
 export default function PaperTradingWorkspace() {
-  const flattenSymbols = useMemo(
-    () => WATCHLISTS.flatMap((list) => list.symbols.map((symbol) => ({ ...symbol }))),
+  const defaultLists = useMemo(
+    () => WATCHLISTS.map((list) => ({
+      ...list,
+      symbols: list.symbols.map((symbol) => ({ ...symbol }))
+    })),
     []
   );
 
-  const [activeWatchlistId, setActiveWatchlistId] = useStickyState('algoteen-paper-watchlist', WATCHLISTS[0].id);
-  const [selectedSymbol, setSelectedSymbol] = useStickyState('algoteen-paper-symbol', WATCHLISTS[0].symbols[0].symbol);
+  const [watchlists, setWatchlists] = useStickyState('algoteen-paper-watchlists', defaultLists);
+
+  const flattenSymbols = useMemo(
+    () => watchlists.flatMap((list) => list.symbols.map((symbol) => ({ ...symbol }))),
+    [watchlists]
+  );
+
+  const [activeWatchlistId, setActiveWatchlistId] = useStickyState(
+    'algoteen-paper-watchlist',
+    WATCHLISTS[0].id
+  );
+  const [selectedSymbol, setSelectedSymbol] = useStickyState(
+    'algoteen-paper-symbol',
+    WATCHLISTS[0].symbols[0].symbol
+  );
   const [realism, setRealism] = useStickyState('algoteen-paper-realism', REALISM_LEVELS[0].id);
+  const [timeframe, setTimeframe] = useStickyState('algoteen-paper-timeframe', '1D');
+  const [showFlowOverview, setShowFlowOverview] = useStickyState('algoteen-paper-flow-open', true);
+  const [lastAction, setLastAction] = useStickyState('algoteen-paper-last-action', null);
+  const [watchQuery, setWatchQuery] = useState('');
   const [tourDismissed, setTourDismissed] = useStickyState('algoteen-paper-tour', false);
 
   const [account, setAccount] = useStickyState('algoteen-paper-account', {
@@ -72,7 +102,9 @@ export default function PaperTradingWorkspace() {
   const [orderDraft, setOrderDraft] = useState({
     side: 'buy',
     type: 'market',
+    quantityMode: 'shares',
     quantity: 1,
+    lots: 1,
     limitPrice: null,
     stopTrigger: null,
     stopLimit: null,
@@ -87,9 +119,11 @@ export default function PaperTradingWorkspace() {
   const [overlayState, setOverlayState] = useState({ sma: true, vwap: true, rsi: true });
   const [pendingMarkers, setPendingMarkers] = useState({ entry: null, stop: null, target: null });
   const [toastQueue, setToastQueue] = useState([]);
+  const toastIdRef = useRef(0);
   const [showStarterBalance, setShowStarterBalance] = useState(() => account.equity === 0);
   const [journalDraft, setJournalDraft] = useState(null);
   const [placing, setPlacing] = useState(false);
+  const [clock, setClock] = useState(() => new Date());
   const [livePrices, setLivePrices] = useState(() => {
     const map = {};
     flattenSymbols.forEach((symbol) => {
@@ -104,6 +138,11 @@ export default function PaperTradingWorkspace() {
   const positionsRef = useRef(null);
 
   const seriesCache = useRef({});
+
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(new Date()), 60000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const getSymbolMeta = useCallback(
     (symbol) => flattenSymbols.find((item) => item.symbol === symbol),
@@ -162,15 +201,43 @@ export default function PaperTradingWorkspace() {
       return;
     }
     setPositions((prev) =>
-      prev.map((position) => ({
-        ...position,
-        markPrice: getSymbolPrice(position.symbol)
-      }))
+      prev.map((position) => {
+        const mark = getSymbolPrice(position.symbol);
+        const trail = [...(position.priceTrail ?? []), mark].slice(-30);
+        return {
+          ...position,
+          markPrice: mark,
+          priceTrail: trail
+        };
+      })
     );
   }, [getSymbolPrice, positions.length, setPositions]);
 
   const chartData = seriesCache.current[selectedSymbol] ?? [];
   const bestPrice = getSymbolPrice(selectedSymbol);
+
+  const filteredWatchlists = useMemo(() => {
+    const term = watchQuery.trim().toLowerCase();
+    if (!term) return watchlists;
+    return watchlists.map((list) => ({
+      ...list,
+      symbols: list.symbols.filter((symbol) => {
+        const haystack = `${symbol.symbol} ${symbol.name}`.toLowerCase();
+        return haystack.includes(term);
+      })
+    }));
+  }, [watchQuery, watchlists]);
+
+  const marketStatus = useMemo(() => {
+    const hours = clock.getHours();
+    const minutes = clock.getMinutes();
+    const isOpen = (hours > 9 || (hours === 9 && minutes >= 30)) && (hours < 16 || (hours === 16 && minutes === 0));
+    return {
+      isOpen,
+      label: isOpen ? 'Open' : 'Closed',
+      clock: clock.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    };
+  }, [clock]);
 
   useEffect(() => {
     setOrderDraft((prev) => ({
@@ -214,6 +281,25 @@ export default function PaperTradingWorkspace() {
     [orderDraft.side]
   );
 
+  const handleChartDoubleClick = useCallback(
+    (price) => {
+      const rounded = roundTo(price, 2);
+      setPendingMarkers((prev) => ({
+        ...prev,
+        entry: rounded
+      }));
+
+      setOrderDraft((prev) => ({
+        ...prev,
+        type: 'limit',
+        limitPrice: rounded,
+        stopPrice: prev.stopPrice ?? roundTo(rounded * (prev.side === 'buy' ? 0.98 : 1.02), 2),
+        targetPrice: prev.targetPrice ?? roundTo(rounded * (prev.side === 'buy' ? 1.02 : 0.98), 2)
+      }));
+    },
+    []
+  );
+
   const handleMarkerChange = useCallback((marker, price) => {
     setPendingMarkers((prev) => ({
       ...prev,
@@ -240,9 +326,17 @@ export default function PaperTradingWorkspace() {
     }
   }, []);
 
-  const pushToast = useCallback((toast) => {
-    setToastQueue((prev) => [...prev, { ...toast, id: toast.id ?? `toast-${Date.now()}` }]);
-  }, []);
+  const pushToast = useCallback(
+    (toast) => {
+      setToastQueue((prev) => {
+        toastIdRef.current += 1;
+        const generatedId = `toast-${toastIdRef.current}`;
+        const id = toast.id ?? generatedId;
+        return [...prev.slice(-3), { ...toast, id }];
+      });
+    },
+    [toastIdRef]
+  );
 
   const dismissToast = useCallback((id) => {
     setToastQueue((prev) => prev.filter((toast) => toast.id !== id));
@@ -252,15 +346,100 @@ export default function PaperTradingWorkspace() {
     setJournalEntries((prev) => [{ ...entry }, ...prev.slice(0, 24)]);
   }, [setJournalEntries]);
 
+  const handleAddSymbol = useCallback(() => {
+    const targetList = watchlists.find((list) => list.id === activeWatchlistId);
+    if (!targetList) {
+      pushToast({ title: 'No list selected', message: 'Pick a watchlist before adding symbols.' });
+      return;
+    }
+
+    const tickerInput = window.prompt('Enter symbol ticker (e.g. AMZN)');
+    if (!tickerInput) return;
+    const ticker = tickerInput.trim().toUpperCase();
+    if (!ticker) return;
+
+    const nameInput = window.prompt('Asset name', ticker) || ticker;
+    const priceInput = Number.parseFloat(window.prompt('Starting price', '100'));
+    const price = Number.isFinite(priceInput) && priceInput > 0 ? priceInput : 100;
+
+    let added = false;
+    setWatchlists((prev) =>
+      prev.map((list) => {
+        const clonedSymbols = list.symbols.map((symbol) => ({ ...symbol }));
+        if (list.id !== activeWatchlistId) {
+          return { ...list, symbols: clonedSymbols };
+        }
+        if (clonedSymbols.some((symbol) => symbol.symbol === ticker)) {
+          return { ...list, symbols: clonedSymbols };
+        }
+        added = true;
+        return {
+          ...list,
+          symbols: [
+            { symbol: ticker, name: nameInput, sector: 'Custom', price, changePct: 0, volume: 0 },
+            ...clonedSymbols
+          ]
+        };
+      })
+    );
+
+    if (added) {
+      setSelectedSymbol(ticker);
+      setWatchQuery('');
+      pushToast({ title: 'Symbol added', message: `${ticker} pinned to ${targetList.name}.` });
+    } else {
+      pushToast({ title: 'Already watching', message: `${ticker} is already in this list.` });
+    }
+  }, [activeWatchlistId, pushToast, setSelectedSymbol, setWatchQuery, setWatchlists, watchlists]);
+
+  const handleGuidedTrade = useCallback(() => {
+    const entry = roundTo(getSymbolPrice(selectedSymbol), 2);
+    const stop = roundTo(entry * 0.98, 2);
+    const target = roundTo(entry * 1.02, 2);
+    const riskCapital = account.equity ? account.equity * 0.02 : account.buyingPower * 0.02;
+    const perShareRisk = Math.max(0.01, entry - stop);
+    const maxShares = Math.max(1, Math.floor(account.buyingPower / Math.max(entry, 0.01)));
+    const suggestedShares = Math.max(1, Math.min(maxShares, Math.floor(riskCapital / perShareRisk)));
+    const lots = Math.max(1, Math.round(suggestedShares / DEFAULT_LOT_SIZE));
+
+    setOrderDraft((prev) => ({
+      ...prev,
+      side: 'buy',
+      type: 'market',
+      quantityMode: 'shares',
+      quantity: suggestedShares,
+      lots,
+      stopPrice: stop,
+      targetPrice: target
+    }));
+    setPendingMarkers({ entry, stop, target });
+    setShowFlowOverview(false);
+    ticketRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    pushToast({ title: 'Guided trade ready', message: 'We prefilled a starter ticket — review and run it.' });
+  }, [
+    account.buyingPower,
+    account.equity,
+    getSymbolPrice,
+    pushToast,
+    selectedSymbol,
+    setOrderDraft,
+    setPendingMarkers,
+    setShowFlowOverview
+  ]);
+
   const executeOrder = useCallback(
     async (draft, { symbol = selectedSymbol, source = 'ticket', quantityOverride } = {}) => {
       setPlacing(true);
-      const quantity = quantityOverride ?? draft.quantity;
-      const basePrice = draft.type === 'market' ? getSymbolPrice(symbol) : draft.limitPrice ?? getSymbolPrice(symbol);
+      const quantity = Math.max(1, quantityOverride ?? Math.floor(draft.quantity));
+      const basePrice =
+        draft.type === 'market' ? getSymbolPrice(symbol) : draft.limitPrice ?? getSymbolPrice(symbol);
       const direction = draft.side === 'buy' ? 1 : -1;
       const slip = (realismConfig.slippageBps / 10000) * basePrice;
       const fillPrice = roundTo(basePrice + direction * slip, 2);
       const fees = roundTo(fillPrice * quantity * 0.0005, 2);
+      const series = seriesCache.current[symbol] ?? [];
+      const candleIndex = series.length ? series[series.length - 1].index : 0;
+      const timestamp = Date.now();
 
       await new Promise((resolve) => window.setTimeout(resolve, 650));
 
@@ -276,18 +455,25 @@ export default function PaperTradingWorkspace() {
             const newEntry = (existing.entryPrice * existing.quantity + fillPrice * quantity) / newQty;
             nextPositions = currentPositions.map((position) =>
               position.id === existing.id
-                ? { ...position, quantity: newQty, entryPrice: roundTo(newEntry, 4), markPrice: getSymbolPrice(symbol) }
+                ? {
+                    ...position,
+                    quantity: newQty,
+                    entryPrice: roundTo(newEntry, 4),
+                    markPrice: getSymbolPrice(symbol),
+                    priceTrail: [...(position.priceTrail ?? []), fillPrice].slice(-30)
+                  }
                 : position
             );
           } else {
             const newPosition = {
-              id: `pos-${Date.now()}`,
+              id: `pos-${timestamp}`,
               symbol,
               side: 'long',
               quantity,
               entryPrice: fillPrice,
               markPrice: getSymbolPrice(symbol),
-              openedAt: Date.now()
+              openedAt: timestamp,
+              priceTrail: [fillPrice]
             };
             nextPositions = [...currentPositions, newPosition];
           }
@@ -308,7 +494,12 @@ export default function PaperTradingWorkspace() {
           } else {
             nextPositions = currentPositions.map((position) =>
               position.id === existing.id
-                ? { ...position, quantity: remaining, markPrice: getSymbolPrice(symbol) }
+                ? {
+                    ...position,
+                    quantity: remaining,
+                    markPrice: getSymbolPrice(symbol),
+                    priceTrail: [...(position.priceTrail ?? []), fillPrice].slice(-30)
+                  }
                 : position
             );
           }
@@ -317,10 +508,10 @@ export default function PaperTradingWorkspace() {
 
         const summary = deriveAccountSummary(nextPositions, nextCash, getSymbolPrice, account.startingBalance);
         setAccount(summary);
-        setEquityTimeline((prev) => [...prev.slice(-98), { timestamp: Date.now(), equity: summary.equity }]);
+        setEquityTimeline((prev) => [...prev.slice(-98), { timestamp, equity: summary.equity }]);
 
         const orderRecord = {
-          id: `order-${Date.now()}`,
+          id: `order-${timestamp}`,
           symbol,
           side: draft.side,
           type: draft.type,
@@ -331,21 +522,22 @@ export default function PaperTradingWorkspace() {
           fees,
           status: 'Filled',
           realism: realismConfig.name,
-          timestamp: Date.now(),
+          timestamp,
           pnl: roundTo(realizedPnl, 2),
-          source
+          source,
+          index: candleIndex
         };
 
         setOrders((prev) => [orderRecord, ...prev.slice(0, 99)]);
 
         if (realizedPnl !== 0) {
           appendJournal({
-            id: `journal-${Date.now()}`,
+            id: `journal-${timestamp}`,
             symbol,
             side: draft.side,
             quantity,
             price: fillPrice,
-            timestamp: Date.now(),
+            timestamp,
             tag: 'Recorded trade',
             note: `Realised ${formatCurrency(realizedPnl)} ${realizedPnl >= 0 ? 'profit' : 'loss'}.`,
             reaction: realizedPnl >= 0 ? '🎉' : '🧠'
@@ -356,7 +548,7 @@ export default function PaperTradingWorkspace() {
             side: draft.side,
             quantity,
             price: fillPrice,
-            timestamp: Date.now()
+            timestamp
           });
         }
 
@@ -371,6 +563,9 @@ export default function PaperTradingWorkspace() {
           }
         });
 
+        setLastAction({ symbol, side: draft.side, quantity, price: fillPrice, timestamp });
+        setShowFlowOverview(false);
+
         setPendingMarkers({ entry: null, stop: null, target: null });
         setOrderDraft((prev) => ({
           ...prev,
@@ -382,9 +577,27 @@ export default function PaperTradingWorkspace() {
         return nextPositions;
       });
     },
-    [account.cash, account.startingBalance, appendJournal, getSymbolPrice, pushToast, realismConfig, selectedSymbol, setAccount, setEquityTimeline, setOrders]
+    [
+      account.cash,
+      account.startingBalance,
+      appendJournal,
+      getSymbolPrice,
+      pushToast,
+      realismConfig,
+      selectedSymbol,
+      setAccount,
+      setEquityTimeline,
+      setJournalDraft,
+      setLastAction,
+      setOrders,
+      setPendingMarkers,
+      setPlacing,
+      setPositions,
+      setShowFlowOverview,
+      setOrderDraft,
+      seriesCache
+    ]
   );
-
   const handleOrderSubmit = useCallback(
     (draft) => {
       if (riskSettings.dailyLossLimit !== 'off' && account.startingBalance) {
@@ -488,80 +701,126 @@ export default function PaperTradingWorkspace() {
     };
   }, [account.equity, account.startingBalance, equityTimeline, orders]);
 
+  const lastActionCopy = useMemo(() => {
+    if (!lastAction) {
+      return 'No trades yet';
+    }
+    const time = new Date(lastAction.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const verb = lastAction.side === 'buy' ? 'Bought' : 'Sold';
+    return `${verb} ${lastAction.quantity} ${lastAction.symbol} · ${formatCurrency(lastAction.price)} · ${time}`;
+  }, [lastAction]);
+
   return (
     <div className="flex min-h-screen flex-col bg-[#F5F7F5] text-[#102019]">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">AlgoTeen Paper Desk</p>
-            <p className="text-lg font-semibold text-slate-900">Teen Challenge Account</p>
-          </div>
-          <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Equity</p>
-              <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.equity)}</p>
+              <p className="text-sm font-semibold text-slate-900">Teen Challenge Account</p>
+              <p className="text-xs text-slate-500">AlgoTeen Paper Desk</p>
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Cash</p>
-              <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.cash)}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Buying power</p>
-              <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.buyingPower)}</p>
-            </div>
-            <span className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">
+            <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
               Simulated
             </span>
           </div>
+          <div className="flex items-center gap-6 text-sm">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Equity</p>
+              <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.equity)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Cash</p>
+              <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.cash)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Buying power</p>
+              <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.buyingPower)}</p>
+            </div>
+          </div>
+        </div>
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pb-3 text-xs text-slate-500">
+          <div className="flex items-center gap-3">
+            <span
+              className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                marketStatus.isOpen
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+              }`}
+            >
+              {marketStatus.label}
+            </span>
+            <span>{marketStatus.clock}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {REALISM_LEVELS.map((level) => {
+              const isActive = level.id === realism;
+              return (
+                <button
+                  key={level.id}
+                  type="button"
+                  onClick={() => setRealism(level.id)}
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
+                    isActive
+                      ? 'bg-blue-700 text-white shadow-sm'
+                      : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                  }`}
+                >
+                  {level.name}
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-xs font-medium text-slate-500">Last action: {lastActionCopy}</div>
         </div>
       </header>
 
       <div className="flex flex-1">
         <WatchlistPanel
-          lists={WATCHLISTS}
+          lists={filteredWatchlists}
           activeListId={activeWatchlistId}
           onSelectList={setActiveWatchlistId}
           onSelectSymbol={(symbol) => {
             setSelectedSymbol(symbol);
             setPendingMarkers({ entry: null, stop: null, target: null });
+            setWatchQuery('');
           }}
           selectedSymbol={selectedSymbol}
           reference={watchlistRef}
+          searchQuery={watchQuery}
+          onSearchChange={setWatchQuery}
+          onAddSymbol={handleAddSymbol}
         />
 
         <main className="flex min-w-0 flex-1 flex-col gap-6 px-6 py-6">
-          <section className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">Flow overview</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Watchlist → chart → ticket → positions. One path, zero zig-zag. Start on the left and move right.
-                </p>
+          {showFlowOverview ? (
+            <section className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Flow overview</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Watchlist → chart → ticket → positions. Start on the left, finish on the right — no zig-zag required.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFlowOverview(false)}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                >
+                  Got it
+                </button>
               </div>
-              <div className="flex gap-2 text-sm">
-              {REALISM_LEVELS.map((level) => {
-                const active = level.id === realism;
-                  return (
-                    <button
-                      key={level.id}
-                      type="button"
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                        active
-                          ? 'border-blue-700 bg-blue-700 text-white'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                      }`}
-                      onClick={() => setRealism(level.id)}
-                    >
-                      {level.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <p className="mt-3 text-xs text-slate-500">
-              {realismConfig.description}
-            </p>
-          </section>
+              <p className="mt-3 text-xs text-slate-500">{realismConfig.description}</p>
+            </section>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowFlowOverview(true)}
+              className="flex items-center justify-between rounded-3xl border border-dashed border-slate-300 bg-white/70 px-6 py-4 text-left text-xs font-medium text-slate-500 shadow-sm transition hover:border-slate-400"
+            >
+              <span>Flow overview hidden. Tap to reopen the guided tips.</span>
+              <span className="text-blue-700">Show tips</span>
+            </button>
+          )}
 
           <TradeChart
             data={chartData}
@@ -569,11 +828,16 @@ export default function PaperTradingWorkspace() {
             overlays={overlayState}
             onToggleOverlay={handleOverlayToggle}
             onChartClick={handleChartClick}
+            onChartDoubleClick={handleChartDoubleClick}
             onMarkerChange={handleMarkerChange}
             markers={pendingMarkers}
             filledOrders={orders.filter((order) => order.symbol === selectedSymbol && order.status === 'Filled')}
             activeSide={orderDraft.side}
             reference={chartRef}
+            timeframe={timeframe}
+            timeframeOptions={TIMEFRAME_PRESETS}
+            onTimeframeChange={setTimeframe}
+            marketStatus={marketStatus}
           />
 
           <OrderTicket
@@ -585,6 +849,9 @@ export default function PaperTradingWorkspace() {
             account={account}
             bestPrice={bestPrice}
             reference={ticketRef}
+            lotSize={DEFAULT_LOT_SIZE}
+            realismConfig={realismConfig}
+            baselineRealism={REALISM_LEVELS[0]}
           />
 
           <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
@@ -650,6 +917,7 @@ export default function PaperTradingWorkspace() {
           riskSettings={riskSettings}
           onRiskChange={setRiskSettings}
           reference={positionsRef}
+          onGuidedTrade={handleGuidedTrade}
         />
       </div>
 

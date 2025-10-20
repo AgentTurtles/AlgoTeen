@@ -49,10 +49,11 @@ export const ORDER_TYPES = [
 ];
 
 export const DAILY_LOSS_LIMITS = [
-  { id: 'off', label: 'Off', value: null },
-  { id: '1', label: '1%', value: 0.01 },
+  { id: '3', label: '3%', value: 0.03 },
   { id: '2', label: '2%', value: 0.02 },
-  { id: '5', label: '5%', value: 0.05 }
+  { id: '5', label: '5%', value: 0.05 },
+  { id: '1', label: '1%', value: 0.01 },
+  { id: 'off', label: 'Off', value: null }
 ];
 
 export const JOURNAL_TAGS = ['Setup', 'Mistake', 'News catalyst', 'Breakout', 'Mean reversion'];

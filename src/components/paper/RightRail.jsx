@@ -13,7 +13,8 @@ export default function RightRail({
   onTabChange,
   riskSettings,
   onRiskChange,
-  reference
+  reference,
+  onGuidedTrade
 }) {
   const tabs = [
     { id: 'positions', label: 'Positions' },
@@ -33,16 +34,8 @@ export default function RightRail({
             <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.equity)}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Cash</p>
-            <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.cash)}</p>
-          </div>
-          <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Buying power</p>
             <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.buyingPower)}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Reserved</p>
-            <p className="mt-1 font-semibold text-slate-900">{formatCurrency(account.reserved)}</p>
           </div>
         </div>
 
@@ -60,7 +53,7 @@ export default function RightRail({
             ))}
           </select>
           <p className="mt-2 text-xs text-slate-500">
-            We soft-block trades if the loss is bigger than your guardrail and show a nudge instead of failing silently.
+            We soft-block trades once losses exceed your guardrail and nudge you to take a break.
           </p>
         </div>
 
@@ -93,7 +86,14 @@ export default function RightRail({
           <div className="space-y-3">
             {positions.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                No positions yet — pick a symbol and place your first order.
+                <p>No positions yet — pick a symbol and place your first order.</p>
+                <button
+                  type="button"
+                  className="mt-3 rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-400 hover:text-slate-900"
+                  onClick={onGuidedTrade}
+                >
+                  Try a guided first trade
+                </button>
               </div>
             ) : (
               positions.map((position) => {
