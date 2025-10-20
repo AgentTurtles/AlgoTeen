@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
 
 import GuidedTour from './GuidedTour';
 import JournalCard from './JournalCard';
@@ -10,7 +11,7 @@ import Toast from './Toast';
 import TradeChart from './TradeChart';
 import WatchlistPanel from './WatchlistPanel';
 import { DAILY_LOSS_LIMITS, JOURNAL_TAGS, REALISM_LEVELS, WATCHLISTS } from './data';
-import { formatCurrency, generateSeries, getLocalStorageValue, roundTo, setLocalStorageValue } from './utils';
+import { formatCurrency, getLocalStorageValue, roundTo, setLocalStorageValue } from './utils';
 
 const DEFAULT_LOT_SIZE = 100;
 
@@ -52,6 +53,7 @@ function deriveAccountSummary(positions, cash, priceLookup, startingBalance) {
 }
 
 export default function PaperTradingWorkspace() {
+  const { status: authStatus } = useSession();
   const defaultLists = useMemo(
     () => WATCHLISTS.map((list) => ({
       ...list,
@@ -81,8 +83,7 @@ export default function PaperTradingWorkspace() {
   const [lastAction, setLastAction] = useStickyState('algoteen-paper-last-action', null);
   const [watchQuery, setWatchQuery] = useState('');
   const [tourDismissed, setTourDismissed] = useStickyState('algoteen-paper-tour', false);
-
-  const [account, setAccount] = useStickyState('algoteen-paper-account', {
+  const [account, setAccount] = useState({
     equity: 0,
     cash: 0,
     buyingPower: 0,
@@ -90,8 +91,8 @@ export default function PaperTradingWorkspace() {
     startingBalance: 0
   });
 
-  const [positions, setPositions] = useStickyState('algoteen-paper-positions', []);
-  const [orders, setOrders] = useStickyState('algoteen-paper-orders', []);
+  const [positions, setPositions] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [journalEntries, setJournalEntries] = useStickyState('algoteen-paper-journal', []);
   const [equityTimeline, setEquityTimeline] = useStickyState('algoteen-paper-equity', []);
   const [activeTab, setActiveTab] = useStickyState('algoteen-paper-rail-tab', 'positions');
@@ -104,7 +105,7 @@ export default function PaperTradingWorkspace() {
     type: 'market',
     quantityMode: 'shares',
     quantity: 1,
-    lots: 1,
+    lots: 0.01,
     limitPrice: null,
     stopTrigger: null,
     stopLimit: null,
@@ -123,26 +124,30 @@ export default function PaperTradingWorkspace() {
   const [showStarterBalance, setShowStarterBalance] = useState(() => account.equity === 0);
   const [journalDraft, setJournalDraft] = useState(null);
   const [placing, setPlacing] = useState(false);
-  const [clock, setClock] = useState(() => new Date());
-  const [livePrices, setLivePrices] = useState(() => {
-    const map = {};
-    flattenSymbols.forEach((symbol) => {
-      map[symbol.symbol] = symbol.price;
-    });
-    return map;
-  });
+  const [clock, setClock] = useState(null);
+  const [livePrices, setLivePrices] = useState({});
+  const [chartSeries, setChartSeries] = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
 
   const watchlistRef = useRef(null);
   const chartRef = useRef(null);
   const ticketRef = useRef(null);
   const positionsRef = useRef(null);
 
-  const seriesCache = useRef({});
 
   useEffect(() => {
+    setClock(new Date());
     const id = window.setInterval(() => setClock(new Date()), 60000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (account.equity > 0 && showStarterBalance) {
+      setShowStarterBalance(false);
+    }
+  }, [account.equity, showStarterBalance]);
 
   const getSymbolMeta = useCallback(
     (symbol) => flattenSymbols.find((item) => item.symbol === symbol),
@@ -155,46 +160,89 @@ export default function PaperTradingWorkspace() {
   );
 
   useEffect(() => {
-    flattenSymbols.forEach((symbol) => {
-      if (!seriesCache.current[symbol.symbol]) {
-        const base = generateSeries(symbol.price, symbol.price * 0.02);
-        seriesCache.current[symbol.symbol] = base;
-      }
-    });
-  }, [flattenSymbols]);
+    if (authStatus !== 'authenticated') return undefined;
+    let active = true;
 
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setLivePrices((prev) => {
-        const next = { ...prev };
-        flattenSymbols.forEach((symbol) => {
-          const last = prev[symbol.symbol] ?? symbol.price;
-          const drift = (Math.random() - 0.5) * symbol.price * 0.002;
-          const price = Math.max(0.1, roundTo(last + drift, 2));
-          next[symbol.symbol] = price;
-
-          const cache = seriesCache.current[symbol.symbol];
-          if (cache) {
-            const lastCandle = cache[cache.length - 1];
-            const nextCandle = {
-              index: lastCandle.index + 1,
-              open: lastCandle.close,
-              close: price,
-              high: Math.max(lastCandle.close, price) + Math.random() * symbol.price * 0.001,
-              low: Math.min(lastCandle.close, price) - Math.random() * symbol.price * 0.001,
-              volume: lastCandle.volume * (0.9 + Math.random() * 0.2),
-              time: lastCandle.time + 1
-            };
-            const updated = [...cache.slice(-239), nextCandle];
-            seriesCache.current[symbol.symbol] = updated;
-          }
+    async function loadAccount() {
+      try {
+        const response = await fetch('/api/alpaca/account', { credentials: 'include' });
+        if (!active || !response.ok) return;
+        const payload = await response.json();
+        const raw = payload.data ?? {};
+        setAccount({
+          equity: Number.parseFloat(raw.equity ?? raw.last_equity ?? 0) || 0,
+          cash: Number.parseFloat(raw.cash ?? 0) || 0,
+          buyingPower: Number.parseFloat(raw.buying_power ?? raw.cash ?? 0) || 0,
+          reserved: Number.parseFloat(raw.long_market_value ?? 0) || 0,
+          startingBalance: Number.parseFloat(raw.last_equity ?? raw.equity ?? 0) || 0
         });
-        return next;
-      });
-    }, 5000);
+      } catch (error) {
+        // ignore network issues and keep last values
+      }
+    }
 
-    return () => window.clearInterval(id);
-  }, [flattenSymbols]);
+    async function loadPositions() {
+      try {
+        const response = await fetch('/api/alpaca/positions', { credentials: 'include' });
+        if (!active || !response.ok) return;
+        const payload = await response.json();
+        const list = Array.isArray(payload.data) ? payload.data : [];
+        setPositions(
+          list.map((item) => ({
+            id: item.asset_id ?? `${item.symbol}-${item.side}`,
+            symbol: item.symbol,
+            quantity: Number.parseFloat(item.qty ?? item.quantity ?? 0) || 0,
+            entryPrice: Number.parseFloat(item.avg_entry_price ?? 0) || 0,
+            marketValue: Number.parseFloat(item.market_value ?? 0) || 0,
+            side: (item.side ?? 'long').toLowerCase(),
+            markPrice: Number.parseFloat(item.current_price ?? item.avg_entry_price ?? 0) || 0,
+            priceTrail: []
+          }))
+        );
+      } catch (error) {
+        // ignore
+      }
+    }
+
+    async function loadOrders() {
+      try {
+        const response = await fetch('/api/alpaca/orders', { credentials: 'include' });
+        if (!active || !response.ok) return;
+        const payload = await response.json();
+        const list = Array.isArray(payload.data) ? payload.data : [];
+        setOrders(
+          list.map((order) => ({
+            id: order.id,
+            symbol: order.symbol,
+            side: order.side,
+            quantity: Number.parseFloat(order.qty ?? 0) || 0,
+            price: Number.parseFloat(order.limit_price ?? order.stop_price ?? order.avg_price ?? 0) || 0,
+            type: order.type,
+            status: order.status,
+            fees: Number.parseFloat(order.filled_avg_price ?? 0) * 0.0005,
+            realism: realism
+          }))
+        );
+      } catch (error) {
+        // ignore
+      }
+    }
+
+    loadAccount();
+    loadPositions();
+    loadOrders();
+
+    const accountId = window.setInterval(loadAccount, 60_000);
+    const positionsId = window.setInterval(loadPositions, 45_000);
+    const ordersId = window.setInterval(loadOrders, 30_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(accountId);
+      window.clearInterval(positionsId);
+      window.clearInterval(ordersId);
+    };
+  }, [authStatus, realism]);
 
   useEffect(() => {
     if (!positions.length) {
@@ -213,22 +261,137 @@ export default function PaperTradingWorkspace() {
     );
   }, [getSymbolPrice, positions.length, setPositions]);
 
-  const chartData = seriesCache.current[selectedSymbol] ?? [];
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !selectedSymbol) return undefined;
+    let active = true;
+
+    async function loadBars() {
+      setChartLoading(true);
+      setChartError(null);
+      try {
+        const response = await fetch(
+          `/api/alpaca/bars?symbol=${encodeURIComponent(selectedSymbol)}&timeframe=${encodeURIComponent(timeframe)}`,
+          { credentials: 'include' }
+        );
+        if (!active) return;
+        if (!response.ok) {
+          setChartError('Unable to load price history right now.');
+          return;
+        }
+        const payload = await response.json();
+        const bars = payload.data?.bars ?? [];
+        const fallbackSeries = payload.data?.fallback;
+        const transformed = bars.map((bar, index) => ({
+          index,
+          open: Number.parseFloat(bar.o ?? bar.open ?? 0) || 0,
+          high: Number.parseFloat(bar.h ?? bar.high ?? 0) || 0,
+          low: Number.parseFloat(bar.l ?? bar.low ?? 0) || 0,
+          close: Number.parseFloat(bar.c ?? bar.close ?? 0) || 0,
+          volume: Number.parseFloat(bar.v ?? bar.volume ?? 0) || 0,
+          time: bar.t ?? bar.time ?? index
+        }));
+        setChartSeries(transformed);
+        if (transformed.length) {
+          const lastClose = transformed[transformed.length - 1].close;
+          setLivePrices((prev) => ({ ...prev, [selectedSymbol]: lastClose }));
+        }
+        setChartError(fallbackSeries ? 'Alpaca is offline — using cached simulation data.' : null);
+      } catch (error) {
+        if (!active) return;
+        setChartError('Unable to load price history right now.');
+      } finally {
+        if (active) {
+          setChartLoading(false);
+        }
+      }
+    }
+
+    loadBars();
+    const id = window.setInterval(loadBars, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
+  }, [authStatus, selectedSymbol, timeframe]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return undefined;
+    const term = watchQuery.trim();
+    if (term.length < 2) {
+      setSearchResults([]);
+      return undefined;
+    }
+    let active = true;
+    const handle = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/alpaca/assets?search=${encodeURIComponent(term)}&limit=25`, {
+          credentials: 'include'
+        });
+        if (!active || !response.ok) return;
+        const payload = await response.json();
+        const assets = Array.isArray(payload.data?.assets) ? payload.data.assets : [];
+        setSearchResults(assets);
+      } catch (error) {
+        if (active) setSearchResults([]);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(handle);
+    };
+  }, [authStatus, watchQuery]);
+
+  useEffect(() => {
+    if (watchQuery.trim() && searchResults.length) {
+      setActiveWatchlistId('alpaca-search');
+    }
+  }, [searchResults.length, setActiveWatchlistId, watchQuery]);
+
+  const chartData = chartSeries;
   const bestPrice = getSymbolPrice(selectedSymbol);
 
   const filteredWatchlists = useMemo(() => {
     const term = watchQuery.trim().toLowerCase();
-    if (!term) return watchlists;
-    return watchlists.map((list) => ({
+    const baseLists = watchlists.map((list) => ({
       ...list,
-      symbols: list.symbols.filter((symbol) => {
-        const haystack = `${symbol.symbol} ${symbol.name}`.toLowerCase();
-        return haystack.includes(term);
-      })
+      symbols: term
+        ? list.symbols.filter((symbol) => {
+            const haystack = `${symbol.symbol} ${symbol.name}`.toLowerCase();
+            return haystack.includes(term);
+          })
+        : list.symbols
     }));
-  }, [watchQuery, watchlists]);
+
+    if (!term) {
+      return baseLists;
+    }
+
+    if (!searchResults.length) {
+      return baseLists;
+    }
+
+    const searchList = {
+      id: 'alpaca-search',
+      name: 'Alpaca matches',
+      description: 'Symbols returned by your live Alpaca search.',
+      symbols: searchResults.map((asset) => ({
+        symbol: asset.symbol,
+        name: asset.name ?? asset.symbol,
+        sector: asset.exchange ?? 'Asset',
+        price: livePrices[asset.symbol] ?? 0,
+        changePct: 0,
+        volume: Number.parseFloat(asset.min_order_size ?? 0) || 0
+      }))
+    };
+
+    return [searchList, ...baseLists];
+  }, [livePrices, searchResults, watchQuery, watchlists]);
 
   const marketStatus = useMemo(() => {
+    if (!clock) {
+      return { isOpen: false, label: 'Loading…', clock: '--:--' };
+    }
     const hours = clock.getHours();
     const minutes = clock.getMinutes();
     const isOpen = (hours > 9 || (hours === 9 && minutes >= 30)) && (hours < 16 || (hours === 16 && minutes === 0));
@@ -398,9 +561,9 @@ export default function PaperTradingWorkspace() {
     const target = roundTo(entry * 1.02, 2);
     const riskCapital = account.equity ? account.equity * 0.02 : account.buyingPower * 0.02;
     const perShareRisk = Math.max(0.01, entry - stop);
-    const maxShares = Math.max(1, Math.floor(account.buyingPower / Math.max(entry, 0.01)));
-    const suggestedShares = Math.max(1, Math.min(maxShares, Math.floor(riskCapital / perShareRisk)));
-    const lots = Math.max(1, Math.round(suggestedShares / DEFAULT_LOT_SIZE));
+    const maxShares = Math.max(0.01, account.buyingPower / Math.max(entry, 0.01));
+    const suggestedShares = Math.max(0.01, Math.min(maxShares, riskCapital / perShareRisk));
+    const lots = Math.max(0.01, roundTo(suggestedShares / DEFAULT_LOT_SIZE, 2));
 
     setOrderDraft((prev) => ({
       ...prev,
@@ -430,14 +593,14 @@ export default function PaperTradingWorkspace() {
   const executeOrder = useCallback(
     async (draft, { symbol = selectedSymbol, source = 'ticket', quantityOverride } = {}) => {
       setPlacing(true);
-      const quantity = Math.max(1, quantityOverride ?? Math.floor(draft.quantity));
+      const quantity = Math.max(0.01, quantityOverride ?? draft.quantity);
       const basePrice =
         draft.type === 'market' ? getSymbolPrice(symbol) : draft.limitPrice ?? getSymbolPrice(symbol);
       const direction = draft.side === 'buy' ? 1 : -1;
       const slip = (realismConfig.slippageBps / 10000) * basePrice;
       const fillPrice = roundTo(basePrice + direction * slip, 2);
       const fees = roundTo(fillPrice * quantity * 0.0005, 2);
-      const series = seriesCache.current[symbol] ?? [];
+      const series = symbol === selectedSymbol ? chartSeries : [];
       const candleIndex = series.length ? series[series.length - 1].index : 0;
       const timestamp = Date.now();
 
@@ -595,7 +758,7 @@ export default function PaperTradingWorkspace() {
       setPositions,
       setShowFlowOverview,
       setOrderDraft,
-      seriesCache
+      chartSeries
     ]
   );
   const handleOrderSubmit = useCallback(
@@ -623,7 +786,7 @@ export default function PaperTradingWorkspace() {
     (positionId, fraction = 1) => {
       const position = positions.find((item) => item.id === positionId);
       if (!position) return;
-      const qty = Math.max(1, Math.floor(position.quantity * fraction));
+      const qty = Math.max(0.01, roundTo(position.quantity * fraction, 4));
       executeOrder(
         {
           ...orderDraft,
@@ -791,8 +954,9 @@ export default function PaperTradingWorkspace() {
           onAddSymbol={handleAddSymbol}
         />
 
-        <main className="flex min-w-0 flex-1 flex-col gap-6 px-6 py-6">
-          {showFlowOverview ? (
+        <main className="flex min-w-0 flex-1 justify-center px-6 py-6">
+          <div className="flex w-full max-w-5xl flex-col gap-6">
+            {showFlowOverview ? (
             <section className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -811,48 +975,60 @@ export default function PaperTradingWorkspace() {
               </div>
               <p className="mt-3 text-xs text-slate-500">{realismConfig.description}</p>
             </section>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowFlowOverview(true)}
-              className="flex items-center justify-between rounded-3xl border border-dashed border-slate-300 bg-white/70 px-6 py-4 text-left text-xs font-medium text-slate-500 shadow-sm transition hover:border-slate-400"
-            >
-              <span>Flow overview hidden. Tap to reopen the guided tips.</span>
-              <span className="text-blue-700">Show tips</span>
-            </button>
-          )}
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowFlowOverview(true)}
+                className="flex items-center justify-between rounded-3xl border border-dashed border-slate-300 bg-white/70 px-6 py-4 text-left text-xs font-medium text-slate-500 shadow-sm transition hover:border-slate-400"
+              >
+                <span>Flow overview hidden. Tap to reopen the guided tips.</span>
+                <span className="text-blue-700">Show tips</span>
+              </button>
+            )}
 
-          <TradeChart
-            data={chartData}
-            symbol={selectedSymbol}
-            overlays={overlayState}
-            onToggleOverlay={handleOverlayToggle}
-            onChartClick={handleChartClick}
-            onChartDoubleClick={handleChartDoubleClick}
-            onMarkerChange={handleMarkerChange}
-            markers={pendingMarkers}
-            filledOrders={orders.filter((order) => order.symbol === selectedSymbol && order.status === 'Filled')}
-            activeSide={orderDraft.side}
-            reference={chartRef}
-            timeframe={timeframe}
-            timeframeOptions={TIMEFRAME_PRESETS}
-            onTimeframeChange={setTimeframe}
-            marketStatus={marketStatus}
-          />
+            <div className="relative">
+              <TradeChart
+                data={chartData}
+                symbol={selectedSymbol}
+                overlays={overlayState}
+                onToggleOverlay={handleOverlayToggle}
+                onChartClick={handleChartClick}
+                onChartDoubleClick={handleChartDoubleClick}
+                onMarkerChange={handleMarkerChange}
+                markers={pendingMarkers}
+                filledOrders={orders.filter((order) => order.symbol === selectedSymbol && order.status === 'Filled')}
+                activeSide={orderDraft.side}
+                reference={chartRef}
+                timeframe={timeframe}
+                timeframeOptions={TIMEFRAME_PRESETS}
+                onTimeframeChange={setTimeframe}
+                marketStatus={marketStatus}
+              />
+              {chartLoading ? (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-white/65 text-sm font-medium text-slate-600">
+                  Refreshing Alpaca data…
+                </div>
+              ) : null}
+            </div>
+            {chartError ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {chartError}
+              </div>
+            ) : null}
 
-          <OrderTicket
-            data={{ positions, symbol: selectedSymbol }}
-            draft={orderDraft}
-            onDraftChange={setOrderDraft}
-            onSubmit={handleOrderSubmit}
-            disabled={placing}
-            account={account}
-            bestPrice={bestPrice}
-            reference={ticketRef}
-            lotSize={DEFAULT_LOT_SIZE}
-            realismConfig={realismConfig}
-            baselineRealism={REALISM_LEVELS[0]}
-          />
+            <OrderTicket
+              data={{ positions, symbol: selectedSymbol }}
+              draft={orderDraft}
+              onDraftChange={setOrderDraft}
+              onSubmit={handleOrderSubmit}
+              disabled={placing}
+              account={account}
+              bestPrice={bestPrice}
+              reference={ticketRef}
+              lotSize={DEFAULT_LOT_SIZE}
+              realismConfig={realismConfig}
+              baselineRealism={REALISM_LEVELS[0]}
+            />
 
           <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
             <h3 className="text-lg font-semibold text-slate-900">Simulation engine notes</h3>
@@ -902,6 +1078,7 @@ export default function PaperTradingWorkspace() {
               </div>
             )}
           </section>
+          </div>
         </main>
 
         <RightRail

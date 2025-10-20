@@ -8,6 +8,11 @@
     "start": "next start",
     "lint": "eslint"
   },
+  "imports": {
+    "next-auth": "./src/lib/next-auth/index.js",
+    "next-auth/react": "./src/lib/next-auth/react.js",
+    "next-auth/jwt": "./src/lib/next-auth/jwt.js"
+  },
   "dependencies": {
     "next": "15.5.4",
     "react": "19.1.0",

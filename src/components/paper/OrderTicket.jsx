@@ -45,10 +45,10 @@ function QuantityControls({
   onModeChange,
   onQuantityChange
 }) {
-  const sliderMax = mode === 'lots' ? Math.max(1, maxLots) : Math.max(1, maxShares);
+  const sliderMax = mode === 'lots' ? Math.max(0.01, maxLots) : Math.max(0.01, maxShares);
   const sliderValue = mode === 'lots' ? lots : quantity;
   const percentOfBuyingPower = maxShares
-    ? Math.min(100, Math.round((quantity / maxShares) * 100))
+    ? Math.min(100, Math.round(((quantity || 0) / maxShares) * 100))
     : 0;
 
   return (
@@ -91,10 +91,11 @@ function QuantityControls({
       <div className="mt-3 flex items-center gap-3">
         <input
           type="range"
-          min={1}
+          min={0.01}
           max={sliderMax}
+          step={0.01}
           value={sliderValue}
-          onChange={(event) => onQuantityChange(Number(event.target.value), mode)}
+          onChange={(event) => onQuantityChange(Number.parseFloat(event.target.value), mode)}
           className="flex-1"
         />
         <button
@@ -113,9 +114,10 @@ function QuantityControls({
           <input
             id="ticket-shares"
             type="number"
-            min={1}
+            min={0.01}
+            step={0.01}
             value={quantity}
-            onChange={(event) => onQuantityChange(Number(event.target.value), 'shares')}
+            onChange={(event) => onQuantityChange(Number.parseFloat(event.target.value), 'shares')}
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
           />
         </div>
@@ -126,9 +128,10 @@ function QuantityControls({
           <input
             id="ticket-lots"
             type="number"
-            min={1}
+            min={0.01}
+            step={0.01}
             value={lots}
-            onChange={(event) => onQuantityChange(Number(event.target.value), 'lots')}
+            onChange={(event) => onQuantityChange(Number.parseFloat(event.target.value), 'lots')}
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
           />
         </div>
@@ -153,15 +156,15 @@ export default function OrderTicket({
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const normalizedLots = draft.quantityMode === 'lots'
-    ? Math.max(1, draft.lots || 1)
-    : Math.max(1, Math.round((draft.quantity || 1) / lotSize));
+    ? Math.max(0.01, Number.parseFloat(draft.lots ?? 0) || 0)
+    : Math.max(0.01, (Number.parseFloat(draft.quantity ?? 0) || 0) / lotSize);
   const normalizedShares = draft.quantityMode === 'lots'
-    ? normalizedLots * lotSize
-    : Math.max(1, draft.quantity || 1);
+    ? roundTo(normalizedLots * lotSize, 4)
+    : Math.max(0.01, Number.parseFloat(draft.quantity ?? 0) || 0);
 
   const effectiveQuantity = normalizedShares;
-  const maxShares = Math.max(1, Math.floor(account.buyingPower / Math.max(bestPrice, 0.01)));
-  const maxLots = Math.max(1, Math.floor(maxShares / lotSize));
+  const maxShares = Math.max(0.01, account.buyingPower / Math.max(bestPrice || 0.01, 0.01));
+  const maxLots = Math.max(0.01, maxShares / lotSize);
 
   const basePrice = draft.type === 'market' ? bestPrice : draft.limitPrice ?? bestPrice;
   const direction = draft.side === 'buy' ? 1 : -1;
@@ -237,24 +240,40 @@ export default function OrderTicket({
   const handleModeChange = (mode) => {
     if (mode === draft.quantityMode) return;
     if (mode === 'lots') {
-      const nextLots = Math.max(1, Math.round(normalizedShares / lotSize));
-      onDraftChange({ ...draft, quantityMode: 'lots', lots: nextLots, quantity: nextLots * lotSize });
+      const nextLots = Math.max(0.01, roundTo(normalizedShares / lotSize, 2));
+      onDraftChange({
+        ...draft,
+        quantityMode: 'lots',
+        lots: nextLots,
+        quantity: roundTo(nextLots * lotSize, 4)
+      });
     } else {
-      onDraftChange({ ...draft, quantityMode: 'shares', quantity: normalizedLots * lotSize, lots: normalizedLots });
+      onDraftChange({
+        ...draft,
+        quantityMode: 'shares',
+        quantity: roundTo(normalizedLots * lotSize, 4),
+        lots: normalizedLots
+      });
     }
   };
 
   const handleQuantityChange = (value, kind = draft.quantityMode) => {
+    const safeValue = Number.isFinite(value) ? value : 0;
     if (kind === 'lots') {
-      const nextLots = Math.max(1, value);
-      onDraftChange({ ...draft, quantityMode: kind, lots: nextLots, quantity: nextLots * lotSize });
-    } else {
-      const nextShares = Math.max(1, value);
+      const nextLots = Math.max(0.01, safeValue);
       onDraftChange({
         ...draft,
         quantityMode: kind,
-        quantity: nextShares,
-        lots: Math.max(1, Math.round(nextShares / lotSize))
+        lots: roundTo(nextLots, 2),
+        quantity: roundTo(nextLots * lotSize, 4)
+      });
+    } else {
+      const nextShares = Math.max(0.01, safeValue);
+      onDraftChange({
+        ...draft,
+        quantityMode: kind,
+        quantity: roundTo(nextShares, 4),
+        lots: roundTo(Math.max(0.01, nextShares / lotSize), 2)
       });
     }
   };
