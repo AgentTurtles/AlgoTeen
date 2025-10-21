@@ -2,6 +2,8 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import GlobalStyles from '../../components/GlobalStyles';
 import SiteFooter from '../../components/SiteFooter';
@@ -20,9 +22,166 @@ const NAV_ITEMS = [
 ];
 
 export default function CodeLabPageClient() {
+  const router = useRouter();
+  const [modeDialogOpen, setModeDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const dismissed =
+      typeof window !== 'undefined' && window.sessionStorage?.getItem('codelabModeDialogDismissed') === 'true';
+
+    if (!dismissed) {
+      setModeDialogOpen(true);
+    }
+  }, []);
+
+  const closeModeDialog = useCallback(() => {
+    setModeDialogOpen(false);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage?.setItem('codelabModeDialogDismissed', 'true');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!modeDialogOpen) {
+      return undefined;
+    }
+
+    if (typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const { body } = document;
+    const previous = body.style.overflow;
+    body.style.overflow = 'hidden';
+
+    return () => {
+      body.style.overflow = previous;
+    };
+  }, [modeDialogOpen]);
+
+  useEffect(() => {
+    if (!modeDialogOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        closeModeDialog();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [modeDialogOpen, closeModeDialog]);
+
+  const handleSelectAnchor = useCallback(
+    (anchorId) => {
+      closeModeDialog();
+
+      if (typeof window === 'undefined') {
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        const target = document.getElementById(anchorId);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    },
+    [closeModeDialog]
+  );
+
+  const handleOpenPaperDesk = useCallback(() => {
+    closeModeDialog();
+    router.push('/paper-trading');
+  }, [closeModeDialog, router]);
+
   return (
     <>
       <GlobalStyles />
+
+      {modeDialogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#04140c]/75 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mode-selector-title"
+            className="relative w-full max-w-3xl rounded-3xl border border-emerald-900/15 bg-white/95 p-6 shadow-[0_40px_90px_rgba(12,38,26,0.35)] backdrop-blur"
+          >
+            <button
+              type="button"
+              onClick={closeModeDialog}
+              className="absolute right-5 top-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-200 text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              aria-label="Close mode selector"
+            >
+              ×
+            </button>
+
+            <div className="space-y-6">
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/70">Start here</span>
+                <h2
+                  id="mode-selector-title"
+                  className="mt-3 text-3xl font-semibold text-emerald-950 drop-shadow-[0_16px_36px_rgba(16,50,36,0.18)]"
+                  style={{ fontFamily: '"Ruigslay"' }}
+                >
+                  How do you want to work today?
+                </h2>
+                <p className="mt-2 text-sm text-emerald-900/75">
+                  Pick a mode to jump straight into the right station. You can reopen this guide from the help menu later.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => handleSelectAnchor('editor')}
+                  className="group rounded-2xl border border-emerald-200 bg-white/90 p-5 text-left shadow-sm transition hover:border-emerald-400 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                >
+                  <span className="block text-sm font-semibold uppercase tracking-[0.24em] text-emerald-700/80">Code</span>
+                  <span className="mt-2 block text-xl font-semibold text-emerald-950">Strategy editor</span>
+                  <p className="mt-2 text-sm text-emerald-900/70">
+                    Write, lint, and debug in Monaco with completions and inline errors.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectAnchor('strategy')}
+                  className="group rounded-2xl border border-emerald-200 bg-white/90 p-5 text-left shadow-sm transition hover:border-emerald-400 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                >
+                  <span className="block text-sm font-semibold uppercase tracking-[0.24em] text-emerald-700/80">Test</span>
+                  <span className="mt-2 block text-xl font-semibold text-emerald-950">Backtest controls</span>
+                  <p className="mt-2 text-sm text-emerald-900/70">
+                    Tune presets, load data, and inspect coverage before running.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenPaperDesk}
+                  className="group rounded-2xl border border-emerald-200 bg-white/90 p-5 text-left shadow-sm transition hover:border-emerald-400 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                >
+                  <span className="block text-sm font-semibold uppercase tracking-[0.24em] text-emerald-700/80">Trade</span>
+                  <span className="mt-2 block text-xl font-semibold text-emerald-950">Paper trading desk</span>
+                  <p className="mt-2 text-sm text-emerald-900/70">
+                    Redirect to the dedicated watchlist → chart → ticket paper workspace.
+                  </p>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeModeDialog}
+                className="inline-flex items-center justify-center rounded-full border border-emerald-200 px-5 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              >
+                I'll explore manually
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="min-h-screen" style={{ scrollBehavior: 'smooth' }}>
         <SiteHeader navItems={NAV_ITEMS} searchItems={SITE_SEARCH_INDEX} />
@@ -64,7 +223,7 @@ export default function CodeLabPageClient() {
             </div>
           </section>
 
-          <section className="bg-[var(--surface-base)] py-24">
+          <section id="editor" className="bg-[var(--surface-base)] py-24">
             <div className="mx-auto max-w-6xl px-4">
               <div className="mx-auto max-w-2xl text-center">
                 <span className="font-bricolage text-sm font-semibold uppercase tracking-[0.32em] text-emerald-700/80">
@@ -81,6 +240,53 @@ export default function CodeLabPageClient() {
 
               <div className="mt-12">
                 <CodeLabWorkbench />
+              </div>
+            </div>
+          </section>
+
+          <section id="paper" className="bg-white py-20">
+            <div className="mx-auto max-w-5xl px-4">
+              <div className="rounded-3xl border border-emerald-900/15 bg-white/95 p-8 shadow-[0_28px_70px_rgba(12,38,26,0.16)]">
+                <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+                  <div className="space-y-4">
+                    <span className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-900/70">Paper trading</span>
+                    <h2 className="text-3xl font-semibold text-emerald-950" style={{ fontFamily: '"Ruigslay"' }}>
+                      Ready for fills? Jump into the new practice desk.
+                    </h2>
+                    <p className="text-base leading-relaxed text-emerald-900/75">
+                      The paper-trading workspace keeps the watchlist on the left, live chart and order ticket in the center, and positions on the right so you can rehearse trades before putting code into production.
+                    </p>
+                    <ul className="space-y-2 text-sm text-emerald-900/75">
+                      <li>• Chart-based entry, stop, and target tools with ghost orders.</li>
+                      <li>• Risk guardrails with buying power fixes and daily loss limits.</li>
+                      <li>• Journaling cards and performance analytics for quick reviews.</li>
+                    </ul>
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      <Link href="/paper-trading" className="cta-primary px-7" style={{ fontSize: '18px', letterSpacing: '-0.4px' }}>
+                        Launch paper trading
+                      </Link>
+                      <Link href="/paper-trading#desk" className="cta-pill px-7" style={{ fontSize: '18px', letterSpacing: '-0.4px' }}>
+                        Preview the layout
+                      </Link>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-900/10 bg-emerald-50/60 p-6">
+                    <div className="space-y-4">
+                      <div className="rounded-xl border border-emerald-200 bg-white/90 p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-900/70">Order ticket</p>
+                        <p className="mt-2 text-sm text-emerald-900/75">Side · quantity slider · estimated risk</p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-200 bg-white/90 p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-900/70">Positions rail</p>
+                        <p className="mt-2 text-sm text-emerald-900/75">Inline close, add stop/target, export history</p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-200 bg-white/90 p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-900/70">Performance</p>
+                        <p className="mt-2 text-sm text-emerald-900/75">Equity curve, heatmaps, and shareable replays</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
