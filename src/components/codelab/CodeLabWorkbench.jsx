@@ -924,7 +924,7 @@ export default function CodeLabWorkbench() {
     }));
   };
 
-  const loadBrokerageData = useCallback(async () => {
+  const loadMarketData = useCallback(async () => {
     setMarketDataStatus('loading');
     setMarketDataError(null);
 
@@ -990,7 +990,7 @@ export default function CodeLabWorkbench() {
       setMarketDataStatus('error');
       setMarketDataError(error.message);
     }
-  }, [assetClass, symbol, timeframe]);
+  }, [assetClass, backtestRange, symbol, timeframe]);
 
   // Remove automatic fetch; only fetch when user clicks 'Load market data'.
 
@@ -1145,6 +1145,228 @@ export default function CodeLabWorkbench() {
       window.clearInterval(interval);
     };
   }, [editorBacktestStatus]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    loadMonaco()
+      .then((monaco) => {
+        if (disposed) {
+          return;
+        }
+
+        if (!monaco || !containerRef.current) {
+          setMonacoStatus('unavailable');
+          setLoadError('Monaco editor could not be initialised. Fallback editor unavailable.');
+          return;
+        }
+
+        monacoRef.current = monaco;
+
+        monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+          noSemanticValidation: false,
+          noSyntaxValidation: false
+        });
+        monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+          target: monaco.languages.typescript.ScriptTarget.ES2020,
+          allowNonTsExtensions: true
+        });
+
+        monaco.languages.registerCompletionItemProvider('javascript', {
+          provideCompletionItems(model, position) {
+            const suggestions = [
+              'ema',
+              'sma',
+              'rsi',
+              'highest',
+              'lowest',
+              'percentChange'
+            ].map((name) => ({
+              label: name,
+              kind: monaco.languages.CompletionItemKind.Function,
+              insertText: `${name}($0)`,
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range: {
+                startLineNumber: position.lineNumber,
+                startColumn: position.column,
+                endLineNumber: position.lineNumber,
+                endColumn: position.column
+              }
+            }));
+            return { suggestions };
+          }
+        });
+
+        monaco.languages.registerHoverProvider('javascript', {
+          provideHover(model, position) {
+            const word = model.getWordAtPosition(position);
+            if (!word) {
+              return null;
+            }
+            const hovers = {
+              ema: 'Exponential moving average. helpers.ema(data, index, length)',
+              rsi: 'Relative Strength Index. helpers.rsi(data, index, length)',
+              highest: 'Highest value over window. helpers.highest(data, index, length, accessor)',
+              lowest: 'Lowest value over window. helpers.lowest(data, index, length, accessor)',
+              percentChange: 'Percent change helper. helpers.percentChange(current, previous)'
+            };
+            if (!hovers[word.word]) {
+              return null;
+            }
+            return {
+              contents: [{ value: `**${word.word}** — ${hovers[word.word]}` }]
+            };
+          }
+        });
+
+        monaco.editor.defineTheme('algoteen-dark', {
+          base: 'vs-dark',
+          inherit: true,
+          rules: [],
+          colors: {
+            'editor.background': '#04140c',
+            'editorLineNumber.foreground': '#34d399',
+            'editorCursor.foreground': '#6ee7b7',
+            'editor.selectionBackground': '#34d39933'
+          }
+        });
+
+        editorRef.current = monaco.editor.create(containerRef.current, {
+          value: editorCode,
+          language: 'javascript',
+          theme: 'algoteen-dark',
+          automaticLayout: true,
+          fontSize: 14,
+          lineHeight: 22,
+          minimap: { enabled: true },
+          scrollBeyondLastLine: false,
+          wordWrap: 'on',
+          renderWhitespace: 'none',
+          bracketPairColorization: { enabled: true },
+          smoothScrolling: true,
+          ariaLabel: 'AlgoTeen strategy editor'
+        });
+
+        editorRef.current.onDidChangeModelContent(() => {
+          setEditorCode(editorRef.current.getValue());
+        });
+
+        setMonacoStatus('ready');
+      })
+      .catch(() => {
+        if (!disposed) {
+          setMonacoStatus('unavailable');
+          setLoadError('Failed to load Monaco editor.');
+        }
+      });
+
+    return () => {
+      disposed = true;
+      if (editorRef.current) {
+        editorRef.current.dispose();
+        editorRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (monacoStatus !== 'ready' || !editorRef.current || !monacoRef.current) {
+      return;
+    }
+    const currentValue = editorRef.current.getValue();
+    if (currentValue !== editorCode) {
+      editorRef.current.setValue(editorCode);
+    }
+  }, [editorCode, monacoStatus]);
+
+  useEffect(() => {
+    if (!editorBacktestResults || !editorBacktestResults.coverage || !monacoRef.current || !editorRef.current) {
+      return;
+    }
+
+    const monaco = monacoRef.current;
+    const model = editorRef.current.getModel();
+    if (!model) {
+      return;
+    }
+
+    if (uncoveredDecorationsRef.current.length > 0) {
+      editorRef.current.deltaDecorations(uncoveredDecorationsRef.current, []);
+    }
+
+    const uncovered = editorBacktestResults.coverage.uncoveredLineNumbers ?? [];
+    if (uncovered.length === 0) {
+      uncoveredDecorationsRef.current = [];
+      return;
+    }
+
+    const decorations = uncovered.map((line) => ({
+      range: new monaco.Range(line, 1, line, 1),
+      options: {
+        isWholeLine: true,
+        className: 'bg-rose-500/10',
+        marginClassName: 'bg-rose-500/20'
+      }
+    }));
+
+    uncoveredDecorationsRef.current = editorRef.current.deltaDecorations([], decorations);
+  }, [editorBacktestResults]);
+
+  useEffect(() => {
+    const handler = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        const input = document.querySelector('[data-docs-search]');
+        if (input instanceof HTMLInputElement) {
+          input.focus();
+          input.select();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const runUnitTests = async () => {
+    setTestsRunning(true);
+    setTimeout(() => {
+      setTestsRunning(false);
+      setEditorBacktestResults((prev) => ({ ...prev }));
+    }, 600);
+  };
+
+  const highlightCoverage = () => {
+    if (!editorBacktestResults || !editorBacktestResults.coverage) {
+      setEditorError('Run a backtest before highlighting coverage.');
+      return;
+    }
+    const uncovered = editorBacktestResults.coverage.uncoveredLineNumbers;
+    if (!uncovered || uncovered.length === 0) {
+      setEditorError('Every branch is covered. Nice!');
+    } else {
+      setEditorError(`Lines ${uncovered.join(', ')} need a signal.`);
+    }
+  };
+
+  const handleTemplateSelect = (template) => {
+    setActiveTemplate(template.id);
+    setEditorCode(template.code);
+    setActivePreset(null);
+    if (editorRef.current) {
+      editorRef.current.setValue(template.code);
+      editorRef.current.focus();
+    }
+  };
+
+  const resetCodeToPreset = () => {
+    const template = STRATEGY_TEMPLATES[activeTemplate] ?? templateList[0];
+    const nextCode = template?.code ?? DEFAULT_STRATEGY_CODE;
+    setEditorCode(nextCode);
+    if (editorRef.current) {
+      editorRef.current.setValue(nextCode);
+      editorRef.current.focus();
+    }
+  };
 
   return (
     <div className="space-y-10">
