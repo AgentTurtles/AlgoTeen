@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
+import { getToken } from 'next-auth/jwt';
+
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'algoteen-dev-secret';
 
 const DATA_BASE = process.env.ALPACA_DATA_BASE_URL ?? 'https://data.alpaca.markets/v2';
 const TRADING_BASE = process.env.ALPACA_TRADING_BASE_URL ?? 'https://paper-api.alpaca.markets/v2';
@@ -11,9 +13,9 @@ async function alpacaRequest(
   path,
   { base = TRADING_BASE, query = {}, method = 'GET', body, headers: extraHeaders = {} } = {}
 ) {
-  const session = await getServerSession();
-  const apiKey = session?.user?.account?.alpaca?.apiKey;
-  const secretKey = session?.user?.account?.alpaca?.secretKey;
+  const token = await getToken({ req: request, secret: AUTH_SECRET });
+  const apiKey = token?.alpaca?.apiKey;
+  const secretKey = token?.alpaca?.secretKey;
 
   if (!apiKey || !secretKey) {
     return { ok: false, status: 401, error: 'Unauthorized' };

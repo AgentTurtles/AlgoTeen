@@ -1,4 +1,5 @@
 const ALPACA_ACCOUNT_URL = process.env.ALPACA_ACCOUNT_URL ?? 'https://paper-api.alpaca.markets/v2/account';
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'algoteen-dev-secret';
 
 async function fetchAlpacaAccount(apiKey, secretKey) {
   try {
@@ -20,6 +21,10 @@ async function fetchAlpacaAccount(apiKey, secretKey) {
 }
 
 export const authOptions = {
+  secret: AUTH_SECRET,
+  pages: {
+    signIn: '/auth/signin'
+  },
   providers: [
     {
       id: 'alpaca',

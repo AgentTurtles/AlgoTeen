@@ -821,7 +821,7 @@ export default function CodeLabWorkbench() {
   const [positionSizingMode, setPositionSizingMode] = useState('fixed');
 
   const [marketData, setMarketData] = useState([]);
-  const [marketDataStatus, setMarketDataStatus] = useState('loading');
+  const [marketDataStatus, setMarketDataStatus] = useState('idle');
   const [marketDataError, setMarketDataError] = useState(null);
   const [marketMetadata, setMarketMetadata] = useState({ symbol: 'SPY', timeframe: '1Day', source: 'POLYGON' });
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
