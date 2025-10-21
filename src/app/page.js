@@ -10,6 +10,7 @@ const NAV_SECTIONS = [
   { id: 'learn', label: 'LEARN' },
   { id: 'trade', label: 'TRADE' },
   { id: 'code', label: 'CODE' },
+  { id: 'paper', label: 'PAPER TRADING' },
   { id: 'support', label: 'SUPPORT' }
 ];
 
@@ -258,6 +259,147 @@ backtest(crossover).run('AAPL');`}</pre>
                     <span style={{fontFamily: 'Bricolage Grotesque'}}>Sharpe 1.6</span>
                     <span style={{fontFamily: 'Bricolage Grotesque'}}>Win Rate 62%</span>
                     <span style={{fontFamily: 'Bricolage Grotesque'}}>Max DD -4.2%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="paper"
+        className="py-24"
+        style={{ backgroundColor: 'var(--surface-base)' }}
+      >
+        <div className="max-w-7xl mx-auto px-4">
+          <div
+            className="section-frame section-wide"
+            style={{
+              background: 'rgba(255, 255, 255, 0.95)',
+              borderColor: 'rgba(15, 47, 31, 0.12)',
+              boxShadow: '0 32px 72px rgba(8, 35, 20, 0.2)'
+            }}
+          >
+            <div className="section-frame-content">
+              <div className="grid gap-12 lg:grid-cols-[1.05fr_0.95fr] items-center">
+                <div className="space-y-6">
+                  <span className="section-label">Paper trading</span>
+                  <h2
+                    className="text-emerald-950 font-medium"
+                    style={{
+                      fontFamily: '"Ruigslay"',
+                      fontSize: 'clamp(48px, 6vw, 72px)',
+                      letterSpacing: '-2px',
+                      textShadow: '0 18px 40px rgba(10, 40, 27, 0.28)'
+                    }}
+                  >
+                    Run the desk without risking real cash.
+                  </h2>
+                  <p
+                    className="text-lg text-emerald-900/80 max-w-xl"
+                    style={{ fontFamily: 'Bricolage Grotesque, -apple-system, Roboto, Helvetica, sans-serif', letterSpacing: '-0.2px', lineHeight: '1.7' }}
+                  >
+                    Build confidence on the simulated trading floor. Monitor watchlists, work orders straight from the chart, and log every practice trade with automatic screenshots and P&amp;L tracking.
+                  </p>
+                  <ul className="space-y-3">
+                    {[
+                      {
+                        title: 'Guided flow',
+                        description: 'Left-to-right layout keeps watchlist, chart, ticket, and positions within reach.'
+                      },
+                      {
+                        title: 'Risk guardrails',
+                        description: 'Buying power checks, loss limits, and quick fixes prevent accidental over-sizing.'
+                      },
+                      {
+                        title: 'Performance insights',
+                        description: 'Equity, heatmaps, and journaling snapshots make reviews fast for teens and mentors.'
+                      }
+                    ].map((item) => (
+                      <li
+                        key={item.title}
+                        className="flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4"
+                      >
+                        <span
+                          className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-emerald-600 text-white"
+                          style={{ fontFamily: 'Bricolage Grotesque, -apple-system, Roboto, Helvetica, sans-serif', fontSize: '18px', fontWeight: 600 }}
+                        >
+                          ✓
+                        </span>
+                        <div>
+                          <p className="text-base font-semibold text-emerald-950">{item.title}</p>
+                          <p className="text-sm text-emerald-900/75">{item.description}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-wrap gap-4">
+                    <Link
+                      href="/paper-trading"
+                      className="cta-primary px-7"
+                      style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
+                    >
+                      Launch paper desk
+                    </Link>
+                    <Link
+                      href="/paper-trading#desk"
+                      className="cta-pill px-7"
+                      style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
+                    >
+                      Explore the layout
+                    </Link>
+                  </div>
+                </div>
+                <div className="relative">
+                  <div
+                    className="rounded-[28px] border border-emerald-900/15 bg-[#04160c] p-6 shadow-[0_24px_60px_rgba(4,22,12,0.45)]"
+                    aria-hidden="true"
+                  >
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                      <div className="space-y-4">
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">Watchlist</p>
+                          <div className="mt-3 space-y-3 text-sm text-emerald-50/90">
+                            <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+                              <span>AAPL</span>
+                              <span className="text-emerald-300">+1.8%</span>
+                            </div>
+                            <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+                              <span>TSLA</span>
+                              <span className="text-rose-300">-0.6%</span>
+                            </div>
+                            <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+                              <span>BTC</span>
+                              <span className="text-emerald-300">+3.4%</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">Open ticket</p>
+                          <p className="mt-3 text-sm text-emerald-50/90">Buy 1 @ 132.40 · Risk 1.5%</p>
+                          <div className="mt-4 flex items-center gap-2">
+                            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/80 px-3 py-1 text-xs font-semibold text-white">
+                              Place order
+                            </span>
+                            <span className="text-xs text-emerald-200/70">Simulated</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col justify-between gap-4">
+                        <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-emerald-500/20 via-emerald-400/10 to-transparent p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">Chart</p>
+                          <div className="mt-3 h-40 rounded-xl bg-[#0b2516]">
+                            <div className="h-full w-full rounded-xl bg-[radial-gradient(circle_at_top,#34d39955,transparent_65%)]"></div>
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">P&amp;L</p>
+                          <p className="mt-2 text-emerald-50/90">Day +$128 · Week +$402</p>
+                          <p className="text-xs text-emerald-200/60">Daily loss guardrail: $250</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
