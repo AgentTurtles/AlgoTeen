@@ -19,7 +19,8 @@ function mapError(code) {
 export default function SignInPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/paper-trading';
+  const callbackUrl =
+    searchParams.get('callbackUrl') ?? searchParams.get('callback') ?? '/paper-trading';
   const errorParam = searchParams.get('error');
 
   const [apiKeyId, setApiKeyId] = useState('');

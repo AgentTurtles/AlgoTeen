@@ -22,6 +22,9 @@ async function fetchAlpacaAccount(apiKey, secretKey) {
 
 export const authOptions = {
   secret: AUTH_SECRET,
+  session: {
+    strategy: 'jwt'
+  },
   pages: {
     signIn: '/auth/signin'
   },
@@ -69,15 +72,27 @@ export const authOptions = {
       return token;
     },
     async session({ session, token }) {
-      if (token?.alpaca) {
-        return {
-          user: {
-            id: token.sub,
-            account: token.alpaca.account
-          }
+      if (!token) {
+        return null;
+      }
+
+      const baseSession = {
+        ...(session ?? {}),
+        user: {
+          ...(session?.user ?? {}),
+          id: token.sub ?? session?.user?.id ?? null,
+          account: token?.alpaca?.account ?? session?.user?.account ?? null
+        }
+      };
+
+      if (token?.alpaca?.account) {
+        baseSession.alpaca = {
+          account: token.alpaca.account,
+          hasCredentials: true
         };
       }
-      return session ?? null;
+
+      return baseSession;
     }
   }
 };
