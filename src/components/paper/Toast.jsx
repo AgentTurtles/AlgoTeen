@@ -6,7 +6,7 @@ export default function Toast({ toast, onDismiss }) {
           <p className="text-sm font-semibold text-slate-900">{toast.title}</p>
           <p className="mt-1 text-xs text-slate-500">{toast.message}</p>
           {toast.action ? (
-            <button type="button" className="mt-2 text-xs font-semibold text-blue-700" onClick={toast.action.onClick}>
+            <button type="button" className="mt-2 text-xs font-semibold text-emerald-700" onClick={toast.action.onClick}>
               {toast.action.label}
             </button>
           ) : null}

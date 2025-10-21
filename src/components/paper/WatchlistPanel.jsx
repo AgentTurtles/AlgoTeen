@@ -56,7 +56,7 @@ export default function WatchlistPanel({
             value={searchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder="Search symbols"
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           />
         </div>
       </div>

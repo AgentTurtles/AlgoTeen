@@ -23,7 +23,7 @@ export default function JournalCard({ entry, onEdit }) {
         <div className="flex gap-2">
           {entry.reaction ? <span>{entry.reaction}</span> : null}
         </div>
-        <button type="button" onClick={() => onEdit(entry.id)} className="font-semibold text-blue-700">
+        <button type="button" onClick={() => onEdit(entry.id)} className="font-semibold text-emerald-700">
           Edit note
         </button>
       </div>

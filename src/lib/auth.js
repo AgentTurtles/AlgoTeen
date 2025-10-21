@@ -72,27 +72,24 @@ export const authOptions = {
       return token;
     },
     async session({ session, token }) {
-      if (!token) {
+      if (!token?.alpaca?.apiKey || !token?.alpaca?.secretKey) {
         return null;
       }
 
-      const baseSession = {
+      const nextSession = {
         ...(session ?? {}),
         user: {
           ...(session?.user ?? {}),
           id: token.sub ?? session?.user?.id ?? null,
           account: token?.alpaca?.account ?? session?.user?.account ?? null
+        },
+        alpaca: {
+          account: token.alpaca.account,
+          hasCredentials: true
         }
       };
 
-      if (token?.alpaca?.account) {
-        baseSession.alpaca = {
-          account: token.alpaca.account,
-          hasCredentials: true
-        };
-      }
-
-      return baseSession;
+      return nextSession;
     }
   }
 };

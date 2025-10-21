@@ -990,7 +990,7 @@ export default function PaperTradingWorkspace() {
               <p className="text-sm font-semibold text-slate-900">Teen Challenge Account</p>
               <p className="text-xs text-slate-500">AlgoTeen Paper Desk</p>
             </div>
-            <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+            <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
               Alpaca Paper
             </span>
           </div>
@@ -1030,9 +1030,9 @@ export default function PaperTradingWorkspace() {
                   key={level.id}
                   type="button"
                   onClick={() => setRealism(level.id)}
-                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
+                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
                     isActive
-                      ? 'bg-blue-700 text-white shadow-sm'
+                      ? 'bg-emerald-600 text-white shadow-sm'
                       : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
                   }`}
                 >
@@ -1087,7 +1087,7 @@ export default function PaperTradingWorkspace() {
                   }
                 ].map((item, index) => (
                   <div key={item.label} className="flex items-start gap-3">
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-700 text-xs font-semibold text-white">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white">
                       {index + 1}
                     </span>
                     <div className="space-y-1">
@@ -1217,7 +1217,7 @@ export default function PaperTradingWorkspace() {
                         type="button"
                         className={`rounded-full border px-3 py-1 text-xs font-semibold ${
                           active
-                            ? 'border-blue-700 bg-blue-700 text-white'
+                            ? 'border-emerald-600 bg-emerald-600 text-white'
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
                         }`}
                         onClick={() => setJournalDraft((prev) => ({ ...prev, tag }))}
@@ -1238,7 +1238,7 @@ export default function PaperTradingWorkspace() {
                         key={emoji}
                         type="button"
                         className={`rounded-full border px-3 py-1 text-base ${
-                          active ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                          active ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
                         }`}
                         onClick={() => setJournalDraft((prev) => ({ ...prev, reaction: emoji }))}
                       >
@@ -1254,7 +1254,7 @@ export default function PaperTradingWorkspace() {
                 </label>
                 <textarea
                   id="journal-note"
-                  className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   rows={3}
                   value={journalDraft.note ?? ''}
                   onChange={(event) => setJournalDraft((prev) => ({ ...prev, note: event.target.value }))}
@@ -1272,7 +1272,7 @@ export default function PaperTradingWorkspace() {
               </button>
               <button
                 type="button"
-                className="rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
                 onClick={() => {
                   appendJournal({ ...journalDraft, id: `journal-${Date.now()}` });
                   setJournalDraft(null);

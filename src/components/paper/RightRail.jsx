@@ -48,7 +48,7 @@ export default function RightRail({
           <select
             value={riskSettings.dailyLossLimit}
             onChange={(event) => onRiskChange({ ...riskSettings, dailyLossLimit: event.target.value })}
-            className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+            className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           >
             {DAILY_LOSS_LIMITS.map((limit) => (
               <option key={limit.id} value={limit.id}>
