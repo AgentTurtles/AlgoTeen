@@ -1114,7 +1114,12 @@ export default function CodeLabWorkbench() {
       setEtaMs(Math.max(0, estimate - elapsed));
     }, 200);
 
-    return (
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [editorBacktestStatus]);
+
+  return (
     <div className="space-y-10">
       {loadError ? (
         <div className="mx-auto w-full max-w-[min(96vw,600px)] rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
