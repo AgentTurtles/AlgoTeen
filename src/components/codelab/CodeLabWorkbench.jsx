@@ -848,6 +848,33 @@ export default function CodeLabWorkbench() {
     [parameters]
   );
 
+  const formattedLastSynced = useMemo(() => {
+    if (!lastSyncedAt) {
+      return '—';
+    }
+
+    const minutesAgo = Math.floor((Date.now() - lastSyncedAt.getTime()) / 60000);
+
+    if (minutesAgo <= 0) {
+      return 'just now';
+    }
+
+    if (minutesAgo < 60) {
+      return `${minutesAgo} min ago`;
+    }
+
+    const hoursAgo = Math.floor(minutesAgo / 60);
+
+    if (hoursAgo < 24) {
+      return `${hoursAgo} hr${hoursAgo === 1 ? '' : 's'} ago`;
+    }
+
+    return `${lastSyncedAt.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric'
+    })} ${lastSyncedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  }, [lastSyncedAt]);
+
   const universe = ASSET_UNIVERSES[assetClass];
   const symbols = universe?.symbols ?? [];
   const timeframes = universe?.timeframes ?? ['1Day'];
