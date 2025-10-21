@@ -207,12 +207,6 @@ export default function OrderTicket({
         return 'Targets for sells should sit below entry.';
       }
     }
-    if (draft.side === 'sell') {
-      const hasPosition = data.positions.some((pos) => pos.symbol === data.symbol);
-      if (!hasPosition) {
-        return 'You need an open position to sell. Shorting is disabled in this simulator.';
-      }
-    }
     if (costWithFees > account.buyingPower) {
       return 'Order exceeds buying power. Reduce size or add funds.';
     }
@@ -440,7 +434,7 @@ export default function OrderTicket({
           )}
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          Simulated execution may differ. We respect daily loss limits and disable trades when your risk exceeds the configured guardrail.
+          Orders route directly to Alpaca&apos;s paper trading API. Live market data and your guardrails determine fill speed and outcomes.
         </p>
       </div>
 

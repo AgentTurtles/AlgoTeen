@@ -333,10 +333,15 @@ export default function TradeChart({
     }
 
     filledOrders
-      .filter((order) => order.index >= visibleStartIndex && order.index <= visibleEndIndex)
+      .filter((order) => order.price != null && Number.isFinite(order.price))
       .forEach((order) => {
+        const resolvedIndex =
+          order.index != null && Number.isFinite(order.index) ? order.index : visibleEndIndex;
+        if (resolvedIndex < visibleStartIndex || resolvedIndex > visibleEndIndex) {
+          return;
+        }
         const orderY = scaleYPrice(order.price);
-        const orderX = scaleXIndex(order.index);
+        const orderX = scaleXIndex(resolvedIndex);
         ctx.fillStyle = order.side === 'buy' ? '#2563EB' : '#DC2626';
         ctx.beginPath();
         ctx.arc(orderX, orderY, 6, 0, Math.PI * 2);

@@ -823,7 +823,7 @@ export default function CodeLabWorkbench() {
   const [marketData, setMarketData] = useState([]);
   const [marketDataStatus, setMarketDataStatus] = useState('loading');
   const [marketDataError, setMarketDataError] = useState(null);
-  const [marketMetadata, setMarketMetadata] = useState({ symbol: 'SPY', timeframe: '1Day', source: 'ALPACA' });
+  const [marketMetadata, setMarketMetadata] = useState({ symbol: 'SPY', timeframe: '1Day', source: 'POLYGON' });
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
   const [editorBacktestStatus, setEditorBacktestStatus] = useState('idle');
@@ -955,7 +955,7 @@ export default function CodeLabWorkbench() {
       setMarketMetadata({
         symbol: payload?.symbol ?? symbol,
         timeframe: payload?.timeframe ?? timeframe,
-        source: payload?.source ?? 'ALPACA'
+        source: payload?.source ?? 'POLYGON'
       });
       setLastSyncedAt(new Date());
       setMarketDataStatus('ready');
@@ -1114,648 +1114,423 @@ export default function CodeLabWorkbench() {
       setEtaMs(Math.max(0, estimate - elapsed));
     }, 200);
 
-    return () => window.clearInterval(interval);
-  }, [editorBacktestStatus]);
-
-  useEffect(() => {
-    let disposed = false;
-
-    loadMonaco()
-      .then((monaco) => {
-        if (disposed) {
-          return;
-        }
-
-        if (!monaco || !containerRef.current) {
-          setMonacoStatus('unavailable');
-          setLoadError('Monaco editor could not be initialised. Fallback editor unavailable.');
-          return;
-        }
-
-        monacoRef.current = monaco;
-
-        monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-          noSemanticValidation: false,
-          noSyntaxValidation: false
-        });
-        monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-          target: monaco.languages.typescript.ScriptTarget.ES2020,
-          allowNonTsExtensions: true
-        });
-
-        monaco.languages.registerCompletionItemProvider('javascript', {
-          provideCompletionItems(model, position) {
-            const suggestions = [
-              'ema',
-              'sma',
-              'rsi',
-              'highest',
-              'lowest',
-              'percentChange'
-            ].map((name) => ({
-              label: name,
-              kind: monaco.languages.CompletionItemKind.Function,
-              insertText: `${name}($0)`,
-              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              range: {
-                startLineNumber: position.lineNumber,
-                startColumn: position.column,
-                endLineNumber: position.lineNumber,
-                endColumn: position.column
-              }
-            }));
-            return { suggestions };
-          }
-        });
-
-        monaco.languages.registerHoverProvider('javascript', {
-          provideHover(model, position) {
-            const word = model.getWordAtPosition(position);
-            if (!word) {
-              return null;
-            }
-            const hovers = {
-              ema: 'Exponential moving average. helpers.ema(data, index, length)',
-              rsi: 'Relative Strength Index. helpers.rsi(data, index, length)',
-              highest: 'Highest value over window. helpers.highest(data, index, length, accessor)',
-              lowest: 'Lowest value over window. helpers.lowest(data, index, length, accessor)',
-              percentChange: 'Percent change helper. helpers.percentChange(current, previous)'
-            };
-            if (!hovers[word.word]) {
-              return null;
-            }
-            return {
-              contents: [{ value: `**${word.word}** — ${hovers[word.word]}` }]
-            };
-          }
-        });
-
-        monaco.editor.defineTheme('algoteen-dark', {
-          base: 'vs-dark',
-          inherit: true,
-          rules: [],
-          colors: {
-            'editor.background': '#04140c',
-            'editorLineNumber.foreground': '#34d399',
-            'editorCursor.foreground': '#6ee7b7',
-            'editor.selectionBackground': '#34d39933'
-          }
-        });
-
-        editorRef.current = monaco.editor.create(containerRef.current, {
-          value: editorCode,
-          language: 'javascript',
-          theme: 'algoteen-dark',
-          automaticLayout: true,
-          fontSize: 14,
-          lineHeight: 22,
-          minimap: { enabled: true },
-          scrollBeyondLastLine: false,
-          wordWrap: 'on',
-          renderWhitespace: 'none',
-          bracketPairColorization: { enabled: true },
-          smoothScrolling: true,
-          ariaLabel: 'AlgoTeen strategy editor'
-        });
-
-        editorRef.current.onDidChangeModelContent(() => {
-          setEditorCode(editorRef.current.getValue());
-        });
-
-        setMonacoStatus('ready');
-      })
-      .catch(() => {
-        if (!disposed) {
-          setMonacoStatus('unavailable');
-          setLoadError('Failed to load Monaco editor.');
-        }
-      });
-
-    return () => {
-      disposed = true;
-      if (editorRef.current) {
-        editorRef.current.dispose();
-        editorRef.current = null;
-      }
-    };
-  }, [editorCode]);
-
-  useEffect(() => {
-    if (monacoStatus !== 'ready' || !editorRef.current || !monacoRef.current) {
-      return;
-    }
-    const currentValue = editorRef.current.getValue();
-    if (currentValue !== editorCode) {
-      editorRef.current.setValue(editorCode);
-    }
-  }, [editorCode, monacoStatus]);
-
-  useEffect(() => {
-    if (!editorBacktestResults || !editorBacktestResults.coverage || !monacoRef.current || !editorRef.current) {
-      return;
-    }
-
-    const monaco = monacoRef.current;
-    const model = editorRef.current.getModel();
-    if (!model) {
-      return;
-    }
-
-    if (uncoveredDecorationsRef.current.length > 0) {
-      editorRef.current.deltaDecorations(uncoveredDecorationsRef.current, []);
-    }
-
-    const uncovered = editorBacktestResults.coverage.uncoveredLineNumbers ?? [];
-    if (uncovered.length === 0) {
-      uncoveredDecorationsRef.current = [];
-      return;
-    }
-
-    const decorations = uncovered.map((line) => ({
-      range: new monaco.Range(line, 1, line, 1),
-      options: {
-        isWholeLine: true,
-        className: 'bg-rose-500/10',
-        marginClassName: 'bg-rose-500/20'
-      }
-    }));
-
-    uncoveredDecorationsRef.current = editorRef.current.deltaDecorations([], decorations);
-  }, [editorBacktestResults]);
-
-  useEffect(() => {
-    const handler = (event) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        const input = document.querySelector('[data-docs-search]');
-        if (input instanceof HTMLInputElement) {
-          input.focus();
-          input.select();
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-
-  const runUnitTests = async () => {
-    setTestsRunning(true);
-    setTimeout(() => {
-      setTestsRunning(false);
-      setEditorBacktestResults((prev) => ({ ...prev }));
-    }, 600);
-  };
-
-  const highlightCoverage = () => {
-    if (!editorBacktestResults || !editorBacktestResults.coverage) {
-      setEditorError('Run a backtest before highlighting coverage.');
-      return;
-    }
-    const uncovered = editorBacktestResults.coverage.uncoveredLineNumbers;
-    if (!uncovered || uncovered.length === 0) {
-      setEditorError('Every branch is covered. Nice!');
-    } else {
-      setEditorError(`Lines ${uncovered.join(', ')} need a signal.`);
-    }
-  };
-
-  const handleTemplateSelect = (template) => {
-    setActiveTemplate(template.id);
-    setEditorCode(template.code);
-    setActivePreset(null);
-    if (editorRef.current) {
-      editorRef.current.setValue(template.code);
-      editorRef.current.focus();
-    }
-  };
-
-  const resetCodeToPreset = () => {
-    const template = STRATEGY_TEMPLATES[activeTemplate] ?? templateList[0];
-    setEditorCode(template.code);
-    if (editorRef.current) {
-      editorRef.current.setValue(template.code);
-      editorRef.current.focus();
-    }
-  };
-
-  const formattedLastSynced = lastSyncedAt
-    ? new Intl.DateTimeFormat('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        month: 'short',
-        day: 'numeric'
-      }).format(lastSyncedAt)
-    : 'Never';
-
-  return (
-  <div className="w-screen min-h-screen bg-emerald-50 flex flex-col items-center justify-start gap-6 py-8 overflow-x-hidden">
+    return (
+    <div className="space-y-10">
       {loadError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-1 py-3 text-sm text-rose-700">{loadError}</div>
+        <div className="mx-auto w-full max-w-[min(96vw,600px)] rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {loadError}
+        </div>
       ) : null}
 
-  <div className="rounded-3xl border border-emerald-100 bg-white/95 shadow-[0_30px_80px_rgba(12,38,26,0.12)] max-w-7xl w-full px-4 sm:px-6 lg:px-8 ms-auto justify-center">
-        <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-emerald-100 bg-white/95 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">AlgoTeen Code Desk</p>
-            <div className="flex items-center gap-2 text-sm text-emerald-900/70">
-              <span>{marketMetadata.symbol}</span>
-              <span aria-hidden="true">•</span>
-              <span>{marketMetadata.timeframe}</span>
-              <span aria-hidden="true">•</span>
-              <span>Last sync {formattedLastSynced}</span>
+      <div className="mx-auto w-full max-w-[min(96vw,1280px)] space-y-10 px-4 sm:px-6 lg:px-8">
+        <section className="rounded-3xl border border-emerald-100 bg-white/95 shadow-[0_30px_80px_rgba(12,38,26,0.12)]">
+          <header className="flex flex-col gap-6 border-b border-emerald-100 bg-white/95 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">AlgoTeen Code Desk</p>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-900/70">
+                <span>{marketMetadata.symbol}</span>
+                <span aria-hidden="true">•</span>
+                <span>{marketMetadata.timeframe}</span>
+                <span aria-hidden="true">•</span>
+                <span>Last sync {formattedLastSynced}</span>
+              </div>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={resetCodeToPreset}
-              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-            >
-              Reset to template
-            </button>
-            <button
-              type="button"
-              onClick={runEditorStrategy}
-              className={cx(
-                'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
-                editorBacktestStatus === 'running'
-                  ? 'bg-emerald-400 hover:bg-emerald-500'
-                  : 'bg-emerald-600 hover:bg-emerald-700'
-              )}
-              disabled={editorBacktestStatus === 'running'}
-            >
-              {editorBacktestStatus === 'running' ? (
-                <>
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-r-transparent" aria-hidden="true" />
-                  Running…
-                </>
-              ) : (
-                'Run backtest'
-              )}
-            </button>
-          </div>
-        </div>
-
-  <div className="grid gap-12 py-6 w-full mx-auto items-start xl:grid-cols-[2fr_1fr]">
-          <div className="space-y-6 w-full flex-1">
-            <div className="flex flex-wrap gap-2">
-              {templateList.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  onClick={() => handleTemplateSelect(template)}
-                  className={cx(
-                    'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
-                    activeTemplate === template.id
-                      ? 'border-emerald-500 bg-emerald-600 text-white'
-                      : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
-                  )}
-                >
-                  {template.name}
-                </button>
-              ))}
-            </div>
-            <div className="rounded-xl border border-emerald-100 bg-[#04140c] p-4 flex justify-center mx-auto w-full">
-              <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-emerald-900/30 min-h-[360px] sm:min-h-[520px] md:min-h-[640px]">
-                {monacoStatus === 'ready' ? null : (
-                  <textarea
-                    value={editorCode}
-                    onChange={(event) => setEditorCode(event.target.value)}
-                    className="h-full w-full resize-none bg-[#04140c] p-4 font-mono text-[14px] text-emerald-100 focus:outline-none"
-                  />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={resetCodeToPreset}
+                className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              >
+                Reset to template
+              </button>
+              <button
+                type="button"
+                onClick={runEditorStrategy}
+                className={cx(
+                  'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
+                  editorBacktestStatus === 'running'
+                    ? 'bg-emerald-400 hover:bg-emerald-500'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
                 )}
-              </div>
+                disabled={editorBacktestStatus === 'running'}
+              >
+                {editorBacktestStatus === 'running' ? (
+                  <>
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-r-transparent" aria-hidden="true" />
+                    Running…
+                  </>
+                ) : (
+                  'Run backtest'
+                )}
+              </button>
             </div>
+          </header>
 
-            <div className="rounded-xl border border-emerald-100 bg-white px-4 py-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Progress</p>
-                  <p className="text-sm text-emerald-900/70">{editorBacktestStatus === 'running' ? 'Crunching trades…' : 'Ready'}</p>
-                </div>
-                <div className="text-right text-sm text-emerald-900/70">
-                  <p>ETA {formatDuration(etaMs)}</p>
-                  <p>{editorProgress.toFixed(0)}%</p>
-                </div>
-              </div>
-              <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-emerald-100">
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-all"
-                  style={{ width: `${editorProgress}%` }}
-                />
-              </div>
-              {editorError ? (
-                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{editorError}</p>
-              ) : null}
-            </div>
-
-            <MetricsHeader metrics={activeMetrics} previousMetrics={previousMetrics} />
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <EquityPreview equityCurve={editorBacktestResults?.equityCurve} />
-              <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Trade digest</p>
-                <p className="text-base text-emerald-900/70">Recent trades sorted by execution order.</p>
-                <div className="mt-4">
-                  <TradesDigest trades={editorBacktestResults?.trades} />
-                </div>
-              </div>
-            </div>
-
-            <ConsolePane
-              runs={runHistory}
-              activeRunId={activeRunId}
-              onSelectRun={setActiveRunId}
-              filter={consoleFilter}
-              onFilterChange={setConsoleFilter}
-            />
+          <div className="border-b border-emerald-100 bg-emerald-50/60 px-6 py-4">
+            <ol className="flex flex-wrap items-center gap-4 text-sm text-emerald-900/80">
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-emerald-700">1</span>
+                <span>Load Polygon bars</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-emerald-700">2</span>
+                <span>Tune strategy inputs</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-emerald-700">3</span>
+                <span>Review metrics & iterate</span>
+              </li>
+            </ol>
           </div>
 
-          <div id="strategy">
-            <ScrollShadowContainer className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-              <div className="space-y-6">
-              <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Parameters</p>
-                    <p className="text-base text-emerald-900/70">Start from a preset or tune each field. Changes apply instantly.</p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {PARAMETER_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => handlePresetApply(preset)}
-                        className={cx(
-                          'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
-                          activePreset === preset.id
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
-                            : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
-                        )}
-                      >
-                        <span className="block font-semibold">{preset.name}</span>
-                        <span className="block text-xs text-emerald-900/70">{preset.description}</span>
-                      </button>
-                    ))}
-                  </div>
+          <div className="grid gap-10 px-6 py-8 xl:grid-cols-[minmax(0,1.8fr)_minmax(320px,1fr)]">
+            <div className="space-y-6">
+              <div className="flex flex-wrap gap-2">
+                {templateList.map((template) => (
                   <button
+                    key={template.id}
                     type="button"
-                    onClick={handleRandomise}
-                    className="self-start rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                    onClick={() => handleTemplateSelect(template)}
+                    className={cx(
+                      'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
+                      activeTemplate === template.id
+                        ? 'border-emerald-500 bg-emerald-600 text-white'
+                        : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
+                    )}
                   >
-                    Randomize within bounds
+                    {template.name}
                   </button>
-                </div>
-                <div className="mt-4 space-y-4">
-                  {PARAMETER_FIELDS.map((field) => (
-                    <ParameterRow
-                      key={field.key}
-                      field={field}
-                      value={parameters[field.key]}
-                      onChange={handleParameterChange}
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-emerald-100 bg-[#04140c] p-4">
+                <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-emerald-900/30 min-h-[360px] sm:min-h-[520px] md:min-h-[640px]">
+                  {monacoStatus === 'ready' ? null : (
+                    <textarea
+                      value={editorCode}
+                      onChange={(event) => setEditorCode(event.target.value)}
+                      className="h-full w-full resize-none bg-[#04140c] p-4 font-mono text-[14px] text-emerald-100 focus:outline-none"
                     />
-                  ))}
+                  )}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Backtest controls</p>
-                <p className="text-base text-emerald-900/70">Choose the dataset, trading window, and execution assumptions.</p>
-                {/* Market Data Summary for Polygon.io */}
-                {marketDataStatus === 'ready' && marketData.length > 0 && (
-                  <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-xs text-emerald-900">
-                    <div className="flex flex-wrap gap-2 items-center">
-                      <span className="font-semibold">Loaded:</span>
-                      <span>{marketData.length} bars</span>
-                      <span>|</span>
-                      <span>Date range:</span>
-                      <span>{marketData[0].date} → {marketData[marketData.length-1].date}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2 items-center mt-1">
-                      <span>Open:</span>
-                      <span>min {Math.min(...marketData.map(b => b.open)).toFixed(2)}</span>
-                      <span>max {Math.max(...marketData.map(b => b.open)).toFixed(2)}</span>
-                      <span>| Close:</span>
-                      <span>min {Math.min(...marketData.map(b => b.close)).toFixed(2)}</span>
-                      <span>max {Math.max(...marketData.map(b => b.close)).toFixed(2)}</span>
-                      <span>| Vol:</span>
-                      <span>avg {Math.round(marketData.reduce((a,b)=>a+b.volume,0)/marketData.length)}</span>
-                    </div>
-                    <div className="mt-2">
-                      <span className="font-semibold">Sample:</span>
-                      <pre className="mt-1 rounded bg-emerald-100/60 p-2 text-[11px] text-emerald-900 overflow-x-auto">
-                        {JSON.stringify(marketData.slice(0,3), null, 2)}
-                      </pre>
-                    </div>
+              <div className="rounded-xl border border-emerald-100 bg-white px-4 py-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Progress</p>
+                    <p className="text-sm text-emerald-900/70">{editorBacktestStatus === 'running' ? 'Crunching trades…' : 'Ready'}</p>
                   </div>
-                )}
-                <div className="mt-4 space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Date range</p>
-                    <div className="flex flex-wrap gap-2">
-                      {QUICK_RANGES.map((range) => (
-                        <button
-                          key={range.id}
-                          type="button"
-                          onClick={() => setQuickRange(range.id)}
-                          className={cx(
-                            'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition',
-                            backtestRange.quickRange === range.id
-                              ? 'border-emerald-500 bg-emerald-600 text-white'
-                              : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
-                          )}
-                        >
-                          {range.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Start</span>
-                        <input
-                          type="date"
-                          value={formatDateInput(backtestRange.startDate)}
-                          onChange={(event) => handleRangeChange('startDate', event.target.value)}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">End</span>
-                        <input
-                          type="date"
-                          value={formatDateInput(backtestRange.endDate)}
-                          onChange={(event) => handleRangeChange('endDate', event.target.value)}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                    </div>
+                  <div className="text-right text-sm text-emerald-900/70">
+                    <p>ETA {formatDuration(etaMs)}</p>
+                    <p>{editorProgress.toFixed(0)}%</p>
                   </div>
+                </div>
+                <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-emerald-100">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all"
+                    style={{ width: `${editorProgress}%` }}
+                  />
+                </div>
+                {editorError ? (
+                  <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{editorError}</p>
+                ) : null}
+              </div>
 
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Universe</p>
-                    <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Asset class</span>
-                      <select
-                        value={assetClass}
-                        onChange={(event) => {
-                          const next = event.target.value;
-                          const config = ASSET_UNIVERSES[next];
-                          setAssetClass(next);
-                          setSymbol(config.defaultSymbol);
-                          setTimeframe(config.defaultTimeframe);
-                        }}
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                      >
-                        {Object.entries(ASSET_UNIVERSES).map(([key, value]) => (
-                          <option key={key} value={key}>
-                            {value.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Symbol</span>
-                      <select
-                        value={symbol}
-                        onChange={(event) => setSymbol(event.target.value)}
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                      >
-                        {symbols.map((option) => (
-                          <option key={option.symbol} value={option.symbol}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Timeframe</span>
-                      <select
-                        value={timeframe}
-                        onChange={(event) => setTimeframe(event.target.value)}
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                      >
-                        {timeframes.map((frame) => (
-                          <option key={frame} value={frame}>
-                            {frame}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={loadBrokerageData}
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                      >
-                        Load market data
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                        onClick={() => navigator.clipboard?.writeText(JSON.stringify({ parameters, backtestRange }, null, 2))}
-                      >
-                        Copy config
-                      </button>
-                    </div>
-                    {marketDataStatus === 'error' ? (
-                      <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{marketDataError}</p>
-                    ) : null}
-                  </div>
+              <MetricsHeader metrics={activeMetrics} previousMetrics={previousMetrics} />
 
-                  <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Fees / slippage (bps)</span>
-                        <input
-                          type="number"
-                          value={slippageBps}
-                          onChange={(event) => setSlippageBps(Number(event.target.value))}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                      <label className="flex items-center gap-2 text-sm text-emerald-900">
-                        <input
-                          type="checkbox"
-                          checked={useExchangeFees}
-                          onChange={(event) => setUseExchangeFees(event.target.checked)}
-                          className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        Use exchange defaults
-                      </label>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Starting capital</span>
-                        <input
-                          type="number"
-                          value={startingCapital}
-                          onChange={(event) => setStartingCapital(Number(event.target.value))}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Max concurrent positions</span>
-                        <input
-                          type="number"
-                          value={maxPositions}
-                          onChange={(event) => setMaxPositions(Number(event.target.value))}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Sizing</p>
-                      <div className="mt-2 inline-flex rounded-full border border-emerald-200 bg-white p-1">
-                        {['fixed', 'risk-based'].map((mode) => (
+              <div className="grid gap-6 lg:grid-cols-2">
+                <EquityPreview equityCurve={editorBacktestResults?.equityCurve} />
+                <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Trade digest</p>
+                  <p className="text-base text-emerald-900/70">Recent trades sorted by execution order.</p>
+                  <div className="mt-4">
+                    <TradesDigest trades={editorBacktestResults?.trades} />
+                  </div>
+                </div>
+              </div>
+
+              <ConsolePane
+                runs={runHistory}
+                activeRunId={activeRunId}
+                onSelectRun={setActiveRunId}
+                filter={consoleFilter}
+                onFilterChange={setConsoleFilter}
+              />
+            </div>
+
+            <div id="strategy" className="space-y-6">
+              <ScrollShadowContainer className="rounded-xl border border-emerald-100 bg-emerald-50/40">
+                <div className="space-y-6 px-5 py-6">
+                  <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+                    <div className="flex flex-col gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Parameters</p>
+                        <p className="text-base text-emerald-900/70">Start from a preset or tune each field. Changes apply instantly.</p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {PARAMETER_PRESETS.map((preset) => (
                           <button
-                            key={mode}
+                            key={preset.id}
                             type="button"
-                            onClick={() => setPositionSizingMode(mode)}
+                            onClick={() => handlePresetApply(preset)}
                             className={cx(
-                              'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] transition',
-                              positionSizingMode === mode
-                                ? 'bg-emerald-600 text-white'
-                                : 'text-emerald-900'
+                              'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
+                              activePreset === preset.id
+                                ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
+                                : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
                             )}
                           >
-                            {mode === 'fixed' ? 'Fixed' : 'Risk'}
+                            <span className="block font-semibold">{preset.name}</span>
+                            <span className="block text-xs text-emerald-900/70">{preset.description}</span>
                           </button>
                         ))}
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleRandomise}
+                        className="self-start rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                      >
+                        Randomize within bounds
+                      </button>
+                    </div>
+                    <div className="mt-4 space-y-4">
+                      {PARAMETER_FIELDS.map((field) => (
+                        <ParameterRow
+                          key={field.key}
+                          field={field}
+                          value={parameters[field.key]}
+                          onChange={handleParameterChange}
+                        />
+                      ))}
                     </div>
                   </div>
+
+                  <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Backtest controls</p>
+                    <p className="text-base text-emerald-900/70">Choose the dataset, trading window, and execution assumptions.</p>
+                    {marketDataStatus === 'ready' && marketData.length > 0 ? (
+                      <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-900">
+                        <p className="font-semibold">Loaded {marketData.length} bars via {(marketMetadata.source ?? 'Polygon').toString().toUpperCase()}.</p>
+                        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-emerald-800/80">
+                          {marketData[0].date} → {marketData[marketData.length - 1].date}
+                        </p>
+                      </div>
+                    ) : null}
+                    <div className="mt-4 space-y-4">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Date range</p>
+                        <div className="flex flex-wrap gap-2">
+                          {QUICK_RANGES.map((range) => (
+                            <button
+                              key={range.id}
+                              type="button"
+                              onClick={() => setQuickRange(range.id)}
+                              className={cx(
+                                'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition',
+                                backtestRange.quickRange === range.id
+                                  ? 'border-emerald-500 bg-emerald-600 text-white'
+                                  : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
+                              )}
+                            >
+                              {range.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Start</span>
+                            <input
+                              type="date"
+                              value={formatDateInput(backtestRange.startDate)}
+                              onChange={(event) => handleRangeChange('startDate', event.target.value)}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">End</span>
+                            <input
+                              type="date"
+                              value={formatDateInput(backtestRange.endDate)}
+                              onChange={(event) => handleRangeChange('endDate', event.target.value)}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Universe</p>
+                        <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Asset class</span>
+                          <select
+                            value={assetClass}
+                            onChange={(event) => {
+                              const next = event.target.value;
+                              const config = ASSET_UNIVERSES[next];
+                              setAssetClass(next);
+                              setSymbol(config.defaultSymbol);
+                              setTimeframe(config.defaultTimeframe);
+                            }}
+                            className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                          >
+                            {Object.entries(ASSET_UNIVERSES).map(([key, value]) => (
+                              <option key={key} value={key}>
+                                {value.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Symbol</span>
+                          <select
+                            value={symbol}
+                            onChange={(event) => setSymbol(event.target.value)}
+                            className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                          >
+                            {symbols.map((option) => (
+                              <option key={option.symbol} value={option.symbol}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Timeframe</span>
+                          <select
+                            value={timeframe}
+                            onChange={(event) => setTimeframe(event.target.value)}
+                            className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                          >
+                            {timeframes.map((frame) => (
+                              <option key={frame} value={frame}>
+                                {frame}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Data</p>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={loadMarketData}
+                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                            disabled={marketDataStatus === 'loading'}
+                          >
+                            {marketDataStatus === 'loading' ? (
+                              <>
+                                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-r-transparent" aria-hidden="true" />
+                                Loading…
+                              </>
+                            ) : (
+                              'Load market data'
+                            )}
+                          </button>
+                          <span className="text-xs text-emerald-900/70">Polygon.io data with smart defaults.</span>
+                        </div>
+                        {marketDataStatus === 'error' ? (
+                          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{marketDataError}</p>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Fees / slippage (bps)</span>
+                            <input
+                              type="number"
+                              value={slippageBps}
+                              onChange={(event) => setSlippageBps(Number(event.target.value))}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-emerald-900">
+                            <input
+                              type="checkbox"
+                              checked={useExchangeFees}
+                              onChange={(event) => setUseExchangeFees(event.target.checked)}
+                              className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            Use exchange defaults
+                          </label>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Starting capital</span>
+                            <input
+                              type="number"
+                              value={startingCapital}
+                              onChange={(event) => setStartingCapital(Number(event.target.value))}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Max concurrent positions</span>
+                            <input
+                              type="number"
+                              value={maxPositions}
+                              onChange={(event) => setMaxPositions(Number(event.target.value))}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Sizing</p>
+                          <div className="mt-2 inline-flex rounded-full border border-emerald-200 bg-white p-1">
+                            {['fixed', 'risk-based'].map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setPositionSizingMode(mode)}
+                                className={cx(
+                                  'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] transition',
+                                  positionSizingMode === mode
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'text-emerald-900'
+                                )}
+                              >
+                                {mode === 'fixed' ? 'Fixed' : 'Risk'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <UnitTestsPanel results={editorBacktestResults} onRunTests={runUnitTests} running={testsRunning} />
+
+                  <SignalCoveragePanel coverage={coverage} onHighlight={highlightCoverage} />
+
+                  <DocsDrawer query={docsQuery} onQueryChange={setDocsQuery} />
                 </div>
-              </div>
-
-              <UnitTestsPanel results={editorBacktestResults} onRunTests={runUnitTests} running={testsRunning} />
-
-              <SignalCoveragePanel coverage={coverage} onHighlight={highlightCoverage} />
-
-              <DocsDrawer query={docsQuery} onQueryChange={setDocsQuery} />
+              </ScrollShadowContainer>
             </div>
-            </ScrollShadowContainer>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div className="rounded-3xl border border-emerald-100 bg-white/95 p-6 shadow-[0_30px_80px_rgba(12,38,26,0.12)]">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">Quick summary</p>
-            <h2 className="text-3xl font-semibold text-emerald-950">Session checklist</h2>
-            <p className="mt-2 text-base text-emerald-900/70">
-              Before running again: confirm presets, review coverage, and skim the log for warnings.
-            </p>
+        <section className="rounded-3xl border border-emerald-100 bg-white/95 p-6 shadow-[0_30px_80px_rgba(12,38,26,0.12)]">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">Quick summary</p>
+              <h2 className="text-3xl font-semibold text-emerald-950">Session checklist</h2>
+              <p className="mt-2 text-base text-emerald-900/70">
+                Before running again: confirm presets, review coverage, and skim the log for warnings.
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
+              {parameterSummary.map((item) => (
+                <div key={item.label} className="flex items-center justify-between">
+                  <span>{item.label}</span>
+                  <span className="font-semibold">{item.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
-            {parameterSummary.map((item) => (
-              <div key={item.label} className="flex items-center justify-between">
-                <span>{item.label}</span>
-                <span className="font-semibold">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   );

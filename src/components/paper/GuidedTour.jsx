@@ -1,7 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export default function GuidedTour({ anchors, onDismiss }) {
   const [currentStep, setCurrentStep] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
+  const dismissedRef = useRef(false);
+
+  const safeDismiss = useCallback(() => {
+    if (dismissedRef.current) {
+      return;
+    }
+    dismissedRef.current = true;
+    setDismissed(true);
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => onDismiss());
+    } else {
+      onDismiss();
+    }
+  }, [onDismiss]);
   const steps = [
     {
       id: 'watchlist',
@@ -30,11 +45,31 @@ export default function GuidedTour({ anchors, onDismiss }) {
   ];
 
   useEffect(() => {
+    if (dismissed) {
+      return undefined;
+    }
     const timer = window.setTimeout(() => {
-      onDismiss();
+      safeDismiss();
     }, 60000);
     return () => window.clearTimeout(timer);
-  }, [onDismiss]);
+  }, [dismissed, safeDismiss]);
+
+  useEffect(() => {
+    if (dismissed) {
+      return undefined;
+    }
+    const handleKey = (event) => {
+      if (event.key === 'Escape') {
+        safeDismiss();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [dismissed, safeDismiss]);
+
+  if (dismissed) {
+    return null;
+  }
 
   const step = steps[currentStep];
   const rect = step?.target?.current?.getBoundingClientRect();
@@ -64,7 +99,7 @@ export default function GuidedTour({ anchors, onDismiss }) {
             ))}
           </div>
           <div className="flex gap-2">
-            <button type="button" className="text-xs font-semibold text-slate-500" onClick={onDismiss}>
+            <button type="button" className="text-xs font-semibold text-slate-500" onClick={safeDismiss}>
               Skip
             </button>
             <button
@@ -72,7 +107,7 @@ export default function GuidedTour({ anchors, onDismiss }) {
               className="rounded-full bg-blue-700 px-4 py-2 text-xs font-semibold text-white"
               onClick={() => {
                 if (currentStep === steps.length - 1) {
-                  onDismiss();
+                  safeDismiss();
                   return;
                 }
                 setCurrentStep((prev) => Math.min(steps.length - 1, prev + 1));
