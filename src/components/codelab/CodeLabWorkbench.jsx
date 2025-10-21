@@ -908,6 +908,13 @@ export default function CodeLabWorkbench() {
         timeframe,
         limit: '500'
       });
+      // Add startDate and endDate if present
+      if (backtestRange.startDate) {
+        params.set('start', new Date(backtestRange.startDate).toISOString().slice(0, 10));
+      }
+      if (backtestRange.endDate) {
+        params.set('end', new Date(backtestRange.endDate).toISOString().slice(0, 10));
+      }
 
       const response = await fetch(`/api/market-data?${params.toString()}`, { cache: 'no-store' });
       if (!response.ok) {
@@ -958,9 +965,7 @@ export default function CodeLabWorkbench() {
     }
   }, [assetClass, symbol, timeframe]);
 
-  useEffect(() => {
-    loadBrokerageData();
-  }, [loadBrokerageData]);
+  // Remove automatic fetch; only fetch when user clicks 'Load market data'.
 
   const pushLog = useCallback((runId, log) => {
     setRunHistory((previous) =>
@@ -1343,13 +1348,13 @@ export default function CodeLabWorkbench() {
     : 'Never';
 
   return (
-    <div className="space-y-12">
+  <div className="w-screen min-h-screen bg-emerald-50 flex flex-col items-center justify-start gap-6 py-8 overflow-x-hidden">
       {loadError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{loadError}</div>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-1 py-3 text-sm text-rose-700">{loadError}</div>
       ) : null}
 
-      <div className="rounded-3xl border border-emerald-100 bg-white/95 shadow-[0_30px_80px_rgba(12,38,26,0.12)]">
-        <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-emerald-100 bg-white/95 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+  <div className="rounded-3xl border border-emerald-100 bg-white/95 shadow-[0_30px_80px_rgba(12,38,26,0.12)] max-w-7xl w-full px-4 sm:px-6 lg:px-8 ms-auto justify-center">
+        <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-emerald-100 bg-white/95 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-1">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">AlgoTeen Code Desk</p>
             <div className="flex items-center gap-2 text-sm text-emerald-900/70">
@@ -1391,8 +1396,8 @@ export default function CodeLabWorkbench() {
           </div>
         </div>
 
-        <div className="grid gap-8 px-6 py-6 lg:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]">
-          <div className="space-y-6">
+  <div className="grid gap-12 py-6 w-full mx-auto items-start xl:grid-cols-[2fr_1fr]">
+          <div className="space-y-6 w-full flex-1">
             <div className="flex flex-wrap gap-2">
               {templateList.map((template) => (
                 <button
@@ -1410,8 +1415,8 @@ export default function CodeLabWorkbench() {
                 </button>
               ))}
             </div>
-            <div className="rounded-xl border border-emerald-100 bg-[#04140c] p-4" style={{ minHeight: '720px' }}>
-              <div ref={containerRef} className="h-[640px] w-full overflow-hidden rounded-lg border border-emerald-900/30">
+            <div className="rounded-xl border border-emerald-100 bg-[#04140c] p-4 flex justify-center mx-auto w-full">
+              <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-emerald-900/30 min-h-[360px] sm:min-h-[520px] md:min-h-[640px]">
                 {monacoStatus === 'ready' ? null : (
                   <textarea
                     value={editorCode}
@@ -1516,6 +1521,34 @@ export default function CodeLabWorkbench() {
               <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Backtest controls</p>
                 <p className="text-base text-emerald-900/70">Choose the dataset, trading window, and execution assumptions.</p>
+                {/* Market Data Summary for Polygon.io */}
+                {marketDataStatus === 'ready' && marketData.length > 0 && (
+                  <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-xs text-emerald-900">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <span className="font-semibold">Loaded:</span>
+                      <span>{marketData.length} bars</span>
+                      <span>|</span>
+                      <span>Date range:</span>
+                      <span>{marketData[0].date} → {marketData[marketData.length-1].date}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 items-center mt-1">
+                      <span>Open:</span>
+                      <span>min {Math.min(...marketData.map(b => b.open)).toFixed(2)}</span>
+                      <span>max {Math.max(...marketData.map(b => b.open)).toFixed(2)}</span>
+                      <span>| Close:</span>
+                      <span>min {Math.min(...marketData.map(b => b.close)).toFixed(2)}</span>
+                      <span>max {Math.max(...marketData.map(b => b.close)).toFixed(2)}</span>
+                      <span>| Vol:</span>
+                      <span>avg {Math.round(marketData.reduce((a,b)=>a+b.volume,0)/marketData.length)}</span>
+                    </div>
+                    <div className="mt-2">
+                      <span className="font-semibold">Sample:</span>
+                      <pre className="mt-1 rounded bg-emerald-100/60 p-2 text-[11px] text-emerald-900 overflow-x-auto">
+                        {JSON.stringify(marketData.slice(0,3), null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
                 <div className="mt-4 space-y-4">
                   <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Date range</p>

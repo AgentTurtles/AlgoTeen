@@ -19,7 +19,8 @@ export default function SignInPage() {
     setLoading(true);
     try {
       await signIn('credentials', {
-        credentials: { apiKeyId, secretKey },
+        apiKeyId,
+        secretKey,
         callbackUrl
       });
     } catch (signInError) {

@@ -47,7 +47,7 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${bricolageGrotesque.variable} ${inter.variable} ${orbitron.variable} ${exo2.variable} antialiased`}
       >
-        <AuthProvider>{children}</AuthProvider>
+  <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

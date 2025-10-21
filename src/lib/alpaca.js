@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { getServerSession } from 'next-auth/next';
 
 const DATA_BASE = process.env.ALPACA_DATA_BASE_URL ?? 'https://data.alpaca.markets/v2';
 const TRADING_BASE = process.env.ALPACA_TRADING_BASE_URL ?? 'https://paper-api.alpaca.markets/v2';
 
 async function proxyAlpaca(request, path, { base = TRADING_BASE, query = {}, method = 'GET' } = {}) {
-  const token = await getToken({ req: request });
-  if (!token?.alpaca?.apiKey || !token?.alpaca?.secretKey) {
+  const session = await getServerSession();
+  const apiKey = session?.user?.account?.alpaca?.apiKey;
+  const secretKey = session?.user?.account?.alpaca?.secretKey;
+  if (!apiKey || !secretKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const url = new URL(path, base);
@@ -20,8 +22,8 @@ async function proxyAlpaca(request, path, { base = TRADING_BASE, query = {}, met
     const response = await fetch(url, {
       method,
       headers: {
-        'APCA-API-KEY-ID': token.alpaca.apiKey,
-        'APCA-API-SECRET-KEY': token.alpaca.secretKey
+        'APCA-API-KEY-ID': apiKey,
+        'APCA-API-SECRET-KEY': secretKey
       }
     });
 
@@ -37,8 +39,29 @@ async function proxyAlpaca(request, path, { base = TRADING_BASE, query = {}, met
 }
 
 export async function fetchBars(request, symbol, timeframe = '1Day', limit = 300) {
-  const result = await proxyAlpaca(request, `/stocks/${symbol}/bars`, {
-    base: DATA_BASE,
+  // Detect asset class by symbol format
+  let assetClass = 'stocks';
+  if (/^[A-Z]+\/[A-Z]+$/.test(symbol)) {
+    if (symbol.endsWith('USD')) {
+      assetClass = symbol.startsWith('BTC') || symbol.startsWith('ETH') ? 'crypto' : 'forex';
+    }
+  }
+
+  let path = '';
+  let base = DATA_BASE;
+  if (assetClass === 'stocks') {
+    path = `/stocks/${symbol}/bars`;
+    base = DATA_BASE;
+  } else if (assetClass === 'crypto') {
+    path = `/crypto/${symbol}/bars`;
+    base = process.env.ALPACA_CRYPTO_BASE_URL ?? 'https://data.alpaca.markets/v1beta3';
+  } else if (assetClass === 'forex') {
+    path = `/forex/${symbol}/bars`;
+    base = process.env.ALPACA_FOREX_BASE_URL ?? 'https://data.alpaca.markets/v1beta1';
+  }
+
+  const result = await proxyAlpaca(request, path, {
+    base,
     query: { timeframe, limit }
   });
   if (result.status !== 200) {
