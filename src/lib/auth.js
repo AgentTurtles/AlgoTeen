@@ -65,27 +65,42 @@ export const authOptions = {
       }
       return token;
     },
-    async session({ session, token }) {
-      if (!token?.sub) {
+    async session({ session, token, user }) {
+      const resolvedUserId = user?.id ?? token?.sub ?? session?.user?.id ?? null;
+
+      if (!resolvedUserId) {
+        return {
+          ...session,
+          user: session?.user ?? null,
+          alpaca: {
+            hasCredentials: false,
+            account: null
+          }
+        };
+      }
+
+      const supabaseUser = await supabaseAdapter.getUser(resolvedUserId);
+      if (!supabaseUser) {
         return null;
       }
 
-      const user = await supabaseAdapter.getUser(token.sub);
-      if (!user) {
-        return null;
-      }
-
-      const credentials = await getCredentialsByUserId(token.sub);
-      const alpaca = await getAlpacaCredentials(token.sub);
+      const credentials = await getCredentialsByUserId(resolvedUserId);
+      const alpaca = await getAlpacaCredentials(resolvedUserId);
 
       return {
         ...session,
         user: {
           ...(session?.user ?? {}),
-          id: user.id,
-          name: user.username ?? user.name ?? credentials?.username ?? null,
-          username: credentials?.username ?? null,
-          email: user.email ?? null
+          id: supabaseUser.id,
+          name:
+            supabaseUser.username ??
+            supabaseUser.name ??
+            credentials?.username ??
+            session?.user?.name ??
+            null,
+          username: credentials?.username ?? supabaseUser.username ?? session?.user?.username ?? null,
+          email: supabaseUser.email ?? session?.user?.email ?? null,
+          image: supabaseUser.image ?? session?.user?.image ?? null
         },
         alpaca: {
           hasCredentials: Boolean(alpaca?.apiKey && alpaca?.secretKey),
