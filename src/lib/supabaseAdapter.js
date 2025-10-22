@@ -106,9 +106,14 @@ function normalizeVerificationToken(data) {
   };
 }
 
+let warnedAboutMemoryAdapter = false;
+
 export function SupabaseAdapter() {
-  if (!supabaseConfigured()) {
-    throw new Error('Supabase environment variables are not configured for NextAuth adapter.');
+  if (!supabaseConfigured() && !warnedAboutMemoryAdapter) {
+    console.warn(
+      'Supabase environment variables are not configured. Using in-memory NextAuth adapter—data will reset between restarts.'
+    );
+    warnedAboutMemoryAdapter = true;
   }
 
   return {
