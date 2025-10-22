@@ -25,21 +25,6 @@ export const WATCHLISTS = [
   }
 ];
 
-export const REALISM_LEVELS = [
-  {
-    id: 'simple',
-    name: 'Simple',
-    slippageBps: 2,
-    description: 'Instant fills at next tick with a flat 2 bps slip. Use this when you are just learning the ropes.'
-  },
-  {
-    id: 'realistic',
-    name: 'Realistic',
-    slippageBps: 6,
-    description: 'Depth-aware fills with 6 bps base slip and partial fills if you oversize. Better for project work.'
-  }
-];
-
 export const ORDER_TYPES = [
   { id: 'market', label: 'Market', description: 'Fill at the next tick including configured slippage.' },
   { id: 'limit', label: 'Limit', description: 'Fill only at your price or better. Stays working until hit.' },

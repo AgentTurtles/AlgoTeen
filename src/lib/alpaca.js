@@ -1,25 +1,74 @@
 import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
+import { getAlpacaCredentials, storeAlpacaCredentials } from './userStore';
+
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'algoteen-dev-secret';
+const ACCOUNT_URL = process.env.ALPACA_ACCOUNT_URL ?? 'https://paper-api.alpaca.markets/v2/account';
 
 const DATA_BASE = process.env.ALPACA_DATA_BASE_URL ?? 'https://data.alpaca.markets/v2';
 const TRADING_BASE = process.env.ALPACA_TRADING_BASE_URL ?? 'https://paper-api.alpaca.markets/v2';
 const CRYPTO_BASE = process.env.ALPACA_CRYPTO_BASE_URL ?? 'https://data.alpaca.markets/v1beta3';
 const FOREX_BASE = process.env.ALPACA_FOREX_BASE_URL ?? 'https://data.alpaca.markets/v1beta1';
 
+async function fetchStoredCredentials(request) {
+  const token = await getToken({ req: request, secret: AUTH_SECRET });
+  const userId = token?.sub;
+  if (!userId) {
+    return null;
+  }
+  const credentials = await getAlpacaCredentials(userId);
+  if (!credentials?.apiKey || !credentials?.secretKey) {
+    return null;
+  }
+  return { ...credentials, userId };
+}
+
+export async function validateAlpacaCredentials(apiKey, secretKey) {
+  let response;
+  try {
+    response = await fetch(ACCOUNT_URL, {
+      headers: {
+        'APCA-API-KEY-ID': apiKey,
+        'APCA-API-SECRET-KEY': secretKey
+      }
+    });
+  } catch (error) {
+    throw new Error('Unable to reach Alpaca account endpoint');
+  }
+
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      data = null;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      data && typeof data === 'object'
+        ? data.message ?? data.error ?? 'Invalid Alpaca credentials.'
+        : 'Invalid Alpaca credentials.';
+    throw new Error(message);
+  }
+
+  return data ?? {};
+}
+
 async function alpacaRequest(
   request,
   path,
   { base = TRADING_BASE, query = {}, method = 'GET', body, headers: extraHeaders = {} } = {}
 ) {
-  const token = await getToken({ req: request, secret: AUTH_SECRET });
-  const apiKey = token?.alpaca?.apiKey;
-  const secretKey = token?.alpaca?.secretKey;
-
-  if (!apiKey || !secretKey) {
+  const stored = await fetchStoredCredentials(request);
+  if (!stored) {
     return { ok: false, status: 401, error: 'Unauthorized' };
   }
+
+  const { apiKey, secretKey, userId } = stored;
 
   const url = new URL(path, base);
   Object.entries(query ?? {}).forEach(([key, value]) => {
@@ -74,6 +123,10 @@ async function alpacaRequest(
         ? data.message ?? data.error ?? 'Failed to reach Alpaca'
         : 'Failed to reach Alpaca';
     return { ok: false, status: response.status, error: message, data };
+  }
+
+  if (path === '/account' && response.ok) {
+    await storeAlpacaCredentials(userId, { apiKey, secretKey, account: data });
   }
 
   return { ok: true, status: response.status, data };

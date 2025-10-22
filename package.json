@@ -3,6 +3,9 @@
   "name": "algoteen",
   "version": "0.1.0",
   "private": true,
+  "imports": {
+    "backtesting-js": "./src/vendor/backtesting-js/index.js"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",

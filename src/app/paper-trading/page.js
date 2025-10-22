@@ -14,7 +14,7 @@ const NAV_ITEMS = [
 export default async function PaperTradingPage() {
   const session = await getServerSession(authOptions);
   if (!session) {
-    redirect(`/auth/signin?callbackUrl=${encodeURIComponent('/paper-trading')}`);
+    redirect(`/auth/signup?callbackUrl=${encodeURIComponent('/paper-trading')}`);
   }
 
   return (

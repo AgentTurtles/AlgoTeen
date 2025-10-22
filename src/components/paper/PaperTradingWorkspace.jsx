@@ -10,7 +10,7 @@ import RightRail from './RightRail';
 import Toast from './Toast';
 import TradeChart from './TradeChart';
 import WatchlistPanel from './WatchlistPanel';
-import { DAILY_LOSS_LIMITS, JOURNAL_TAGS, REALISM_LEVELS, WATCHLISTS } from './data';
+import { DAILY_LOSS_LIMITS, JOURNAL_TAGS, WATCHLISTS } from './data';
 import { formatCurrency, getLocalStorageValue, roundTo, setLocalStorageValue } from './utils';
 
 const DEFAULT_LOT_SIZE = 100;
@@ -79,7 +79,6 @@ export default function PaperTradingWorkspace() {
     'algoteen-paper-symbol',
     WATCHLISTS[0].symbols[0].symbol
   );
-  const [realism, setRealism] = useStickyState('algoteen-paper-realism', REALISM_LEVELS[0].id);
   const [timeframe, setTimeframe] = useStickyState('algoteen-paper-timeframe', '1D');
   const [lastAction, setLastAction] = useStickyState('algoteen-paper-last-action', null);
   const [watchQuery, setWatchQuery] = useState('');
@@ -121,6 +120,9 @@ export default function PaperTradingWorkspace() {
   const [overlayState, setOverlayState] = useState({ sma: true, vwap: true, rsi: true });
   const [pendingMarkers, setPendingMarkers] = useState({ entry: null, stop: null, target: null });
   const [toastQueue, setToastQueue] = useState([]);
+  const [alpacaStatus, setAlpacaStatus] = useState({ loading: true, connected: false, account: null, error: null });
+  const [credentialsDraft, setCredentialsDraft] = useState({ apiKey: '', secretKey: '', submitting: false, error: null });
+  const [disconnecting, setDisconnecting] = useState(false);
   const toastIdRef = useRef(0);
   const [journalDraft, setJournalDraft] = useState(null);
   const [placing, setPlacing] = useState(false);
@@ -137,7 +139,7 @@ export default function PaperTradingWorkspace() {
   const positionsRef = useRef(null);
 
   const loadAccount = useCallback(async () => {
-    if (authStatus !== 'authenticated') {
+    if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
       return;
     }
     try {
@@ -157,10 +159,10 @@ export default function PaperTradingWorkspace() {
     } catch (error) {
       // ignore network errors
     }
-  }, [authStatus]);
+  }, [alpacaStatus.connected, authStatus]);
 
   const loadPositions = useCallback(async () => {
-    if (authStatus !== 'authenticated') {
+    if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
       return;
     }
     try {
@@ -191,10 +193,10 @@ export default function PaperTradingWorkspace() {
     } catch (error) {
       // ignore
     }
-  }, [authStatus]);
+  }, [alpacaStatus.connected, authStatus]);
 
   const loadOrders = useCallback(async () => {
-    if (authStatus !== 'authenticated') {
+    if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
       return;
     }
     try {
@@ -246,8 +248,143 @@ export default function PaperTradingWorkspace() {
     } catch (error) {
       // ignore
     }
+  }, [alpacaStatus.connected, authStatus]);
+
+  const refreshCredentials = useCallback(async () => {
+    if (authStatus !== 'authenticated') {
+      setAlpacaStatus({ loading: false, connected: false, account: null, error: null });
+      return;
+    }
+    setAlpacaStatus((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const response = await fetch('/api/alpaca/credentials', { credentials: 'include' });
+      if (!response.ok) {
+        if (response.status === 401) {
+          setAlpacaStatus({ loading: false, connected: false, account: null, error: null });
+          return;
+        }
+        throw new Error('Unable to load Alpaca credentials');
+      }
+      const payload = await response.json();
+      setAlpacaStatus({
+        loading: false,
+        connected: Boolean(payload?.hasCredentials),
+        account: payload?.account ?? null,
+        error: null
+      });
+    } catch (error) {
+      setAlpacaStatus({
+        loading: false,
+        connected: false,
+        account: null,
+        error: 'Unable to reach Alpaca credentials right now.'
+      });
+    }
   }, [authStatus]);
 
+  const connectAlpaca = useCallback(
+    async () => {
+      const apiKey = credentialsDraft.apiKey.trim();
+      const secretKey = credentialsDraft.secretKey.trim();
+
+      if (!apiKey || !secretKey) {
+        setCredentialsDraft((prev) => ({
+          ...prev,
+          error: 'Enter both your Alpaca API key and secret key to connect.'
+        }));
+        return;
+      }
+
+      setAlpacaStatus((prev) => ({ ...prev, error: null }));
+      setCredentialsDraft((prev) => ({ ...prev, submitting: true, error: null }));
+      try {
+        const response = await fetch('/api/alpaca/credentials', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey, secretKey })
+        });
+
+        let payload = {};
+        try {
+          payload = await response.json();
+        } catch (error) {
+          payload = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(payload?.error ?? 'Unable to connect to Alpaca right now.');
+        }
+
+        setCredentialsDraft({ apiKey: '', secretKey: '', submitting: false, error: null });
+        setAlpacaStatus({
+          loading: false,
+          connected: true,
+          account: payload?.account ?? null,
+          error: null
+        });
+
+        pushToast({ title: 'Alpaca connected', message: 'Paper account ready — live orders now route to Alpaca.' });
+
+        await Promise.all([loadAccount(), loadPositions(), loadOrders()]);
+      } catch (error) {
+        const message = error?.message ?? 'Unable to connect to Alpaca right now.';
+        setCredentialsDraft((prev) => ({ ...prev, submitting: false, error: message }));
+        setAlpacaStatus((prev) => ({ ...prev, loading: false, connected: false, error: message }));
+      }
+    },
+    [
+      credentialsDraft.apiKey,
+      credentialsDraft.secretKey,
+      loadAccount,
+      loadOrders,
+      loadPositions,
+      pushToast
+    ]
+  );
+
+  const disconnectAlpaca = useCallback(
+    async () => {
+      setDisconnecting(true);
+      try {
+        const response = await fetch('/api/alpaca/credentials', {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+
+        let payload = {};
+        try {
+          payload = await response.json();
+        } catch (error) {
+          payload = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(payload?.error ?? 'Unable to disconnect from Alpaca right now.');
+        }
+
+        setAlpacaStatus({ loading: false, connected: false, account: null, error: null });
+        setCredentialsDraft({ apiKey: '', secretKey: '', submitting: false, error: null });
+        setAccount({ equity: 0, cash: 0, buyingPower: 0, reserved: 0, startingBalance: 0 });
+        setPositions([]);
+        setOrders([]);
+        setEquityTimeline([]);
+        setLastAction(null);
+        setPendingMarkers({ entry: null, stop: null, target: null });
+        pushToast({ title: 'Alpaca disconnected', message: 'Removed keys — reconnect when you are ready to trade.' });
+      } catch (error) {
+        const message = error?.message ?? 'Unable to disconnect from Alpaca right now.';
+        pushToast({ title: 'Disconnect failed', message });
+      } finally {
+        setDisconnecting(false);
+      }
+    },
+    [pushToast]
+  );
+
+  useEffect(() => {
+    refreshCredentials();
+  }, [refreshCredentials]);
 
   useEffect(() => {
     setClock(new Date());
@@ -266,7 +403,7 @@ export default function PaperTradingWorkspace() {
   );
 
   useEffect(() => {
-    if (authStatus !== 'authenticated') {
+    if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
       return undefined;
     }
     let active = true;
@@ -299,7 +436,7 @@ export default function PaperTradingWorkspace() {
       window.clearInterval(positionsId);
       window.clearInterval(ordersId);
     };
-  }, [authStatus, loadAccount, loadOrders, loadPositions]);
+  }, [alpacaStatus.connected, authStatus, loadAccount, loadOrders, loadPositions]);
 
   useEffect(() => {
     if (!positions.length) {
@@ -438,7 +575,8 @@ export default function PaperTradingWorkspace() {
   }, [searchResults.length, setActiveWatchlistId, watchQuery]);
 
   const chartData = chartSeries;
-  const bestPrice = getSymbolPrice(selectedSymbol);
+  const rawBestPrice = getSymbolPrice(selectedSymbol);
+  const bestPrice = Number.isFinite(rawBestPrice) ? rawBestPrice : 0;
 
   const filteredWatchlists = useMemo(() => {
     const term = watchQuery.trim().toLowerCase();
@@ -494,11 +632,14 @@ export default function PaperTradingWorkspace() {
   }, [clock]);
 
   useEffect(() => {
+    if (!Number.isFinite(rawBestPrice) || rawBestPrice <= 0) {
+      return;
+    }
     setOrderDraft((prev) => ({
       ...prev,
-      limitPrice: prev.type === 'market' ? prev.limitPrice : roundTo(bestPrice, 2)
+      limitPrice: prev.type === 'market' ? prev.limitPrice : roundTo(rawBestPrice, 2)
     }));
-  }, [bestPrice]);
+  }, [rawBestPrice, setOrderDraft]);
 
   const handleOverlayToggle = useCallback((key, explicit) => {
     setOverlayState((prev) => ({
@@ -506,8 +647,6 @@ export default function PaperTradingWorkspace() {
       [key]: typeof explicit === 'boolean' ? explicit : !prev[key]
     }));
   }, []);
-
-  const realismConfig = useMemo(() => REALISM_LEVELS.find((item) => item.id === realism) ?? REALISM_LEVELS[0], [realism]);
 
   const handleChartClick = useCallback(
     (price) => {
@@ -691,6 +830,11 @@ export default function PaperTradingWorkspace() {
         return;
       }
 
+      if (!alpacaStatus.connected) {
+        pushToast({ title: 'Connect Alpaca', message: 'Link your Alpaca paper keys before placing live paper orders.' });
+        return;
+      }
+
       const meta = getSymbolMeta(symbol);
       const assetClass = meta?.assetClass ?? 'stocks';
       const normalizedSymbol = formatSymbolForAlpaca(symbol, assetClass);
@@ -842,6 +986,7 @@ export default function PaperTradingWorkspace() {
       }
     },
     [
+      alpacaStatus.connected,
       authStatus,
       getSymbolMeta,
       getSymbolPrice,
@@ -1022,24 +1167,9 @@ export default function PaperTradingWorkspace() {
             </span>
             <span>{marketStatus.clock}</span>
           </div>
-          <div className="flex items-center gap-2">
-            {REALISM_LEVELS.map((level) => {
-              const isActive = level.id === realism;
-              return (
-                <button
-                  key={level.id}
-                  type="button"
-                  onClick={() => setRealism(level.id)}
-                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
-                    isActive
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                  }`}
-                >
-                  {level.name}
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <span className="rounded-full border border-slate-200 px-3 py-1">Live paper execution</span>
+            <span className="hidden sm:inline">Polygon data · Alpaca orders</span>
           </div>
           <div className="text-xs font-medium text-slate-500">Last action: {lastActionCopy}</div>
         </div>
@@ -1064,11 +1194,142 @@ export default function PaperTradingWorkspace() {
 
         <main className="flex min-w-0 flex-1 justify-center px-6 py-6">
           <div className="flex w-full max-w-5xl flex-col gap-6">
+            <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
+              {alpacaStatus.loading ? (
+                <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-slate-600">
+                  <div>
+                    <p className="text-base font-semibold text-slate-900">Checking Alpaca connection…</p>
+                    <p className="mt-1 text-xs text-slate-500">We are making sure your paper keys are still valid.</p>
+                  </div>
+                  <span className="inline-flex h-3 w-3 animate-ping rounded-full bg-emerald-500" aria-hidden="true" />
+                </div>
+              ) : alpacaStatus.connected ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-base font-semibold text-slate-900">Alpaca paper account connected</p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {alpacaStatus.account?.account_number
+                          ? `Account ${alpacaStatus.account.account_number}`
+                          : 'Keys encrypted with your AlgoTeen account.'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                        onClick={refreshCredentials}
+                        disabled={alpacaStatus.loading}
+                      >
+                        Refresh status
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={disconnectAlpaca}
+                        disabled={disconnecting}
+                      >
+                        {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Status</p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {(alpacaStatus.account?.status ?? 'active').toString().replace(/_/g, ' ')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Currency</p>
+                      <p className="mt-1 font-semibold text-slate-900">{alpacaStatus.account?.currency ?? 'USD'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Buying power</p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {formatCurrency(
+                          Number.parseFloat(alpacaStatus.account?.buying_power ?? account.buyingPower ?? 0) || 0
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Your Alpaca API keys stay encrypted in Supabase. We surface account status and buying power automatically.
+                  </p>
+                </div>
+              ) : (
+                <form
+                  className="space-y-5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    connectAlpaca();
+                  }}
+                >
+                  <div>
+                    <p className="text-base font-semibold text-slate-900">Connect to Alpaca paper trading</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Paste the API key pair from your Alpaca dashboard. We will verify them and store them securely.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700" htmlFor="alpaca-api-key">
+                      API key
+                      <input
+                        id="alpaca-api-key"
+                        type="text"
+                        autoComplete="off"
+                        value={credentialsDraft.apiKey}
+                        onChange={(event) => {
+                          setCredentialsDraft((prev) => ({ ...prev, apiKey: event.target.value, error: null }));
+                          setAlpacaStatus((prev) => ({ ...prev, error: null }));
+                        }}
+                        className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                        placeholder="PKxxxxxxxx"
+                        required
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700" htmlFor="alpaca-secret-key">
+                      Secret key
+                      <input
+                        id="alpaca-secret-key"
+                        type="password"
+                        autoComplete="new-password"
+                        value={credentialsDraft.secretKey}
+                        onChange={(event) => {
+                          setCredentialsDraft((prev) => ({ ...prev, secretKey: event.target.value, error: null }));
+                          setAlpacaStatus((prev) => ({ ...prev, error: null }));
+                        }}
+                        className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                        placeholder="SKxxxxxxxx"
+                        required
+                      />
+                    </label>
+                  </div>
+                  {credentialsDraft.error || alpacaStatus.error ? (
+                    <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {credentialsDraft.error ?? alpacaStatus.error}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      We only use these keys for paper trading. Disconnect anytime to remove them from storage.
+                    </p>
+                    <button
+                      type="submit"
+                      disabled={credentialsDraft.submitting}
+                      className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-400/60"
+                    >
+                      {credentialsDraft.submitting ? 'Connecting…' : 'Connect Alpaca keys'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </section>
             <section className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <h2 className="text-xl font-semibold text-slate-900">Paper trading flow</h2>
                 <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">
-                  {realismConfig.name} mode
+                  Orders settle via Alpaca paper
                 </span>
               </div>
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -1097,7 +1358,9 @@ export default function PaperTradingWorkspace() {
                   </div>
                 ))}
               </div>
-              <p className="mt-4 text-xs text-slate-500">{realismConfig.description}</p>
+              <p className="mt-4 text-xs text-slate-500">
+                Fill estimates use live Alpaca quotes—review cost and risk before sending each simulated ticket.
+              </p>
             </section>
 
             <div className="relative">
@@ -1142,8 +1405,6 @@ export default function PaperTradingWorkspace() {
               bestPrice={bestPrice}
               reference={ticketRef}
               lotSize={DEFAULT_LOT_SIZE}
-              realismConfig={realismConfig}
-              baselineRealism={REALISM_LEVELS[0]}
             />
 
           <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">

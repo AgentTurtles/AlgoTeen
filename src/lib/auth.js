@@ -1,95 +1,101 @@
-const ALPACA_ACCOUNT_URL = process.env.ALPACA_ACCOUNT_URL ?? 'https://paper-api.alpaca.markets/v2/account';
+import CredentialsProvider from 'next-auth/providers/credentials';
+
+import { SupabaseAdapter } from './supabaseAdapter';
+import { verifyPassword } from './passwords';
+import { getCredentialsByUsername, getCredentialsByUserId, getAlpacaCredentials } from './userStore';
+
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'algoteen-dev-secret';
 
-async function fetchAlpacaAccount(apiKey, secretKey) {
-  try {
-    const response = await fetch(ALPACA_ACCOUNT_URL, {
-      headers: {
-        'APCA-API-KEY-ID': apiKey,
-        'APCA-API-SECRET-KEY': secretKey
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error('Invalid Alpaca credentials');
-    }
-
-    return response.json();
-  } catch (error) {
-    throw new Error('Unable to reach Alpaca account endpoint');
-  }
-}
+const supabaseAdapter = SupabaseAdapter();
 
 export const authOptions = {
+  adapter: supabaseAdapter,
   secret: AUTH_SECRET,
   session: {
-    strategy: 'jwt'
+    strategy: 'database'
   },
   pages: {
-    signIn: '/auth/signin'
+    signIn: '/auth/signin',
+    newUser: '/auth/signup'
   },
   providers: [
-    {
-      id: 'alpaca',
-      name: 'Alpaca',
-      type: 'credentials',
+    CredentialsProvider({
+      id: 'credentials',
+      name: 'Credentials',
+      credentials: {
+        username: { label: 'Username', type: 'text' },
+        password: { label: 'Password', type: 'password' }
+      },
       async authorize(credentials) {
-        const apiKey = credentials?.apiKeyId?.trim?.() ?? credentials?.apiKey?.trim?.();
-        const secretKey = credentials?.secretKey?.trim?.();
-        if (!apiKey || !secretKey) {
+        const username = credentials?.username?.trim();
+        const password = credentials?.password ?? '';
+
+        if (!username || password.length === 0) {
           return null;
         }
-        try {
-          const account = await fetchAlpacaAccount(apiKey, secretKey);
-          return {
-            id: account.id,
-            account,
-            alpaca: {
-              apiKey,
-              secretKey
-            }
-          };
-        } catch (error) {
+
+        const record = await getCredentialsByUsername(username);
+        if (!record || !record.password_hash) {
           return null;
         }
+
+        const valid = verifyPassword(password, record.password_hash);
+        if (!valid) {
+          return null;
+        }
+
+        const user = await supabaseAdapter.getUser(record.user_id);
+        if (!user) {
+          return null;
+        }
+
+        return {
+          id: user.id,
+          name: user.username ?? user.name ?? username,
+          email: user.email ?? null
+        };
       }
-    }
+    })
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user?.alpaca) {
-        return {
-          ...token,
-          sub: user.id,
-          alpaca: {
-            apiKey: user.alpaca.apiKey,
-            secretKey: user.alpaca.secretKey,
-            account: user.account
-          },
-          account: user.account
-        };
+      if (user?.id) {
+        token.sub = user.id;
+        token.name = user.name ?? null;
       }
       return token;
     },
     async session({ session, token }) {
-      if (!token?.alpaca?.apiKey || !token?.alpaca?.secretKey) {
+      if (!token?.sub) {
         return null;
       }
 
-      const nextSession = {
-        ...(session ?? {}),
+      const user = await supabaseAdapter.getUser(token.sub);
+      if (!user) {
+        return null;
+      }
+
+      const credentials = await getCredentialsByUserId(token.sub);
+      const alpaca = await getAlpacaCredentials(token.sub);
+
+      return {
+        ...session,
         user: {
           ...(session?.user ?? {}),
-          id: token.sub ?? session?.user?.id ?? null,
-          account: token?.alpaca?.account ?? session?.user?.account ?? null
+          id: user.id,
+          name: user.username ?? user.name ?? credentials?.username ?? null,
+          username: credentials?.username ?? null,
+          email: user.email ?? null
         },
         alpaca: {
-          account: token.alpaca.account,
-          hasCredentials: true
+          hasCredentials: Boolean(alpaca?.apiKey && alpaca?.secretKey),
+          account: alpaca?.account ?? null
         }
       };
-
-      return nextSession;
     }
   }
 };
+
+export function getSupabaseAuthAdapter() {
+  return supabaseAdapter;
+}

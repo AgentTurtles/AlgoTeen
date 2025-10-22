@@ -12,91 +12,26 @@ import loadMonaco from '../../lib/monacoLoader';
 
 const templateList = Object.values(STRATEGY_TEMPLATES);
 
-const PARAMETER_FIELDS = [
+const GUIDELINE_CALLOUTS = [
   {
-    key: 'fastLength',
-    label: 'Fast EMA length',
-    description: 'Controls how quickly the strategy reacts to new trends.',
-    min: 4,
-    max: 48,
-    step: 1,
-    defaultValue: 8,
-    type: 'range',
-    suffix: 'bars'
+    title: 'Return structured actions',
+    description:
+      "Strategies must return an object such as { action: 'buy', note } or { action: 'exit' }. Size defaults to 1 unless you set it explicitly."
   },
   {
-    key: 'slowLength',
-    label: 'Slow EMA length',
-    description: 'Long-term trend confirmation to avoid chop.',
-    min: 10,
-    max: 120,
-    step: 1,
-    defaultValue: 21,
-    type: 'range',
-    suffix: 'bars'
+    title: 'Lean on helpers',
+    description:
+      'The engine injects helpers like ema, rsi, highest, and lowest. Call them with (data, index, length) to stay in sync with backtesting.js.'
   },
   {
-    key: 'exitRsi',
-    label: 'RSI exit threshold',
-    description: 'Exit once momentum is overbought and cooling off.',
-    min: 55,
-    max: 90,
-    step: 1,
-    defaultValue: 68,
-    type: 'range'
+    title: 'Use state safely',
+    description:
+      'State exposes positionSize, entryPrice, cash, and equity each bar—read-only. Compute new signals from these values instead of mutating globals.'
   },
   {
-    key: 'stopLoss',
-    label: 'Stop loss (%)',
-    description: 'Capital at risk per trade before forcing an exit.',
-    min: 1,
-    max: 15,
-    step: 0.5,
-    defaultValue: 3,
-    type: 'number',
-    suffix: '%'
-  },
-  {
-    key: 'takeProfit',
-    label: 'Take profit (%)',
-    description: 'Lock gains after a strong move in your favour.',
-    min: 2,
-    max: 30,
-    step: 0.5,
-    defaultValue: 6,
-    type: 'number',
-    suffix: '%'
-  },
-  {
-    key: 'positionSize',
-    label: 'Position size',
-    description: 'Units per order. Switch to risk-based sizing in controls.',
-    min: 1,
-    max: 50,
-    step: 1,
-    defaultValue: 1,
-    type: 'number'
-  }
-];
-
-const PARAMETER_PRESETS = [
-  {
-    id: 'conservative',
-    name: 'Conservative',
-    description: 'Longer trends with tight risk.',
-    values: { fastLength: 12, slowLength: 34, exitRsi: 62, stopLoss: 2.5, takeProfit: 4, positionSize: 1 }
-  },
-  {
-    id: 'balanced',
-    name: 'Balanced',
-    description: 'Default crossover mix for most markets.',
-    values: { fastLength: 8, slowLength: 21, exitRsi: 68, stopLoss: 3, takeProfit: 6, positionSize: 1 }
-  },
-  {
-    id: 'aggro',
-    name: 'Aggro',
-    description: 'Fast reactions, wider targets for volatile assets.',
-    values: { fastLength: 5, slowLength: 13, exitRsi: 72, stopLoss: 4.5, takeProfit: 9, positionSize: 2 }
+    title: 'Keep strategies pure',
+    description:
+      'Avoid network calls or mutable global data. Deterministic logic keeps the backtesting.js engine trustworthy across re-runs.'
   }
 ];
 
@@ -356,75 +291,6 @@ function MetricsHeader({ metrics, previousMetrics }) {
       {metricItems.map((item) => (
         <MetricTile key={item.key} label={item.label} value={item.value} delta={item.delta} />
       ))}
-    </div>
-  );
-}
-
-function ParameterRow({ field, value, onChange }) {
-  const id = `${field.key}-input`;
-  const handleSliderChange = (event) => {
-    const next = Number(event.target.value);
-    onChange(field.key, next);
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <label htmlFor={id} className="block text-sm font-semibold text-emerald-950">
-            {field.label}
-          </label>
-          <p className="mt-1 text-sm text-emerald-900/70">{field.description}</p>
-        </div>
-        <button
-          type="button"
-          title={field.description}
-          className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-200 text-xs font-semibold text-emerald-700"
-          aria-label={`Help for ${field.label}`}
-        >
-          ?
-        </button>
-      </div>
-      {field.type === 'range' ? (
-        <div className="space-y-2">
-          <input
-            id={id}
-            type="range"
-            min={field.min}
-            max={field.max}
-            step={field.step}
-            value={value}
-            onChange={handleSliderChange}
-            className="w-full accent-emerald-600"
-          />
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              min={field.min}
-              max={field.max}
-              step={field.step}
-              value={value}
-              onChange={handleSliderChange}
-              className="w-24 rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            />
-            <span className="text-sm text-emerald-900/70">{field.suffix ?? ''}</span>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center gap-3">
-          <input
-            id={id}
-            type="number"
-            min={field.min}
-            max={field.max}
-            step={field.step}
-            value={value}
-            onChange={handleSliderChange}
-            className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-          />
-          <span className="text-sm text-emerald-900/70">{field.suffix ?? ''}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -795,16 +661,6 @@ export default function CodeLabWorkbench() {
 
   const [editorCode, setEditorCode] = useState(DEFAULT_STRATEGY_CODE);
   const [activeTemplate, setActiveTemplate] = useState(templateList[0].id);
-
-  const [parameters, setParameters] = useState(() => {
-    const defaults = {};
-    PARAMETER_FIELDS.forEach((field) => {
-      defaults[field.key] = field.defaultValue;
-    });
-    return defaults;
-  });
-  const [activePreset, setActivePreset] = useState('balanced');
-
   const [assetClass, setAssetClass] = useState('stocks');
   const [symbol, setSymbol] = useState(ASSET_UNIVERSES.stocks.defaultSymbol);
   const [timeframe, setTimeframe] = useState(ASSET_UNIVERSES.stocks.defaultTimeframe);
@@ -842,12 +698,6 @@ export default function CodeLabWorkbench() {
 
   const runStartRef = useRef(null);
   const estimatedDurationRef = useRef(5000);
-
-  const parameterSummary = useMemo(
-    () => PARAMETER_FIELDS.map((field) => ({ label: field.label, value: parameters[field.key] })),
-    [parameters]
-  );
-
   const formattedLastSynced = useMemo(() => {
     if (!lastSyncedAt) {
       return '—';
@@ -881,30 +731,33 @@ export default function CodeLabWorkbench() {
 
   const activeMetrics = editorBacktestResults?.metrics ?? null;
   const coverage = editorBacktestResults?.coverage ?? null;
-
-  const handleParameterChange = useCallback((key, value) => {
-    setParameters((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const handlePresetApply = (preset) => {
-    setActivePreset(preset.id);
-    setParameters(preset.values);
-  };
-
-  const handleRandomise = () => {
-    setParameters((prev) => {
-      const next = { ...prev };
-      PARAMETER_FIELDS.forEach((field) => {
-        const range = field.max - field.min;
-        const random = field.min + Math.random() * range;
-        const snapped = field.step ? Math.round(random / field.step) * field.step : random;
-        next[field.key] = Number(snapped.toFixed(2));
-      });
-      return next;
-    });
-    setActivePreset(null);
-  };
-
+  const quickSummary = useMemo(() => {
+    if (!activeMetrics) {
+      const dataStatus =
+        marketDataStatus === 'ready'
+          ? `${marketData.length} bars loaded`
+          : marketDataStatus === 'loading'
+            ? 'Loading market data…'
+            : 'No data yet';
+      return [
+        { label: 'Status', value: 'Awaiting first run' },
+        { label: 'Data', value: dataStatus },
+        { label: 'Engine', value: 'backtesting.js' }
+      ];
+    }
+    return [
+      { label: 'Total return', value: formatPercent(activeMetrics.totalReturn) },
+      { label: 'Max drawdown', value: formatPercent(activeMetrics.maxDrawdown) },
+      {
+        label: 'Sharpe',
+        value: Number.isFinite(activeMetrics.sharpe) ? activeMetrics.sharpe.toFixed(2) : '—'
+      },
+      {
+        label: 'Win rate',
+        value: formatPercent(activeMetrics.winRate)
+      }
+    ];
+  }, [activeMetrics, marketData.length, marketDataStatus]);
   const setQuickRange = (rangeId) => {
     const quick = QUICK_RANGES.find((item) => item.id === rangeId);
     if (!quick) {
@@ -1351,7 +1204,6 @@ export default function CodeLabWorkbench() {
   const handleTemplateSelect = (template) => {
     setActiveTemplate(template.id);
     setEditorCode(template.code);
-    setActivePreset(null);
     if (editorRef.current) {
       editorRef.current.setValue(template.code);
       editorRef.current.focus();
@@ -1437,7 +1289,7 @@ export default function CodeLabWorkbench() {
             </ol>
           </div>
 
-          <div className="grid gap-10 px-6 py-8 xl:grid-cols-[minmax(0,1.8fr)_minmax(320px,1fr)]">
+          <div className="grid gap-10 px-8 py-10 xl:grid-cols-[minmax(0,2.2fr)_minmax(320px,0.9fr)] 2xl:px-12">
             <div className="space-y-6">
               <div className="flex flex-wrap gap-2">
                 {templateList.map((template) => (
@@ -1517,47 +1369,25 @@ export default function CodeLabWorkbench() {
               <ScrollShadowContainer className="rounded-xl border border-emerald-100 bg-emerald-50/40">
                 <div className="space-y-6 px-5 py-6">
                   <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-                    <div className="flex flex-col gap-4">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Parameters</p>
-                        <p className="text-base text-emerald-900/70">Start from a preset or tune each field. Changes apply instantly.</p>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        {PARAMETER_PRESETS.map((preset) => (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => handlePresetApply(preset)}
-                            className={cx(
-                              'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
-                              activePreset === preset.id
-                                ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
-                                : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
-                            )}
-                          >
-                            <span className="block font-semibold">{preset.name}</span>
-                            <span className="block text-xs text-emerald-900/70">{preset.description}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleRandomise}
-                        className="self-start rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                      >
-                        Randomize within bounds
-                      </button>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Backtesting.js essentials</p>
+                      <p className="text-base text-emerald-900/70">
+                        Every strategy runs inside the backtesting.js engine. Follow these guardrails before you hit run.
+                      </p>
                     </div>
-                    <div className="mt-4 space-y-4">
-                      {PARAMETER_FIELDS.map((field) => (
-                        <ParameterRow
-                          key={field.key}
-                          field={field}
-                          value={parameters[field.key]}
-                          onChange={handleParameterChange}
-                        />
+                    <div className="space-y-3">
+                      {GUIDELINE_CALLOUTS.map((callout) => (
+                        <div
+                          key={callout.title}
+                          className="rounded-xl border border-emerald-100 bg-white/90 p-4 shadow-sm"
+                        >
+                          <h3 className="text-sm font-semibold text-emerald-950">{callout.title}</h3>
+                          <p className="mt-1 text-sm text-emerald-900/70">{callout.description}</p>
+                        </div>
                       ))}
                     </div>
+                  </div>
                   </div>
 
                   <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
@@ -1776,7 +1606,7 @@ export default function CodeLabWorkbench() {
               </p>
             </div>
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
-              {parameterSummary.map((item) => (
+              {quickSummary.map((item) => (
                 <div key={item.label} className="flex items-center justify-between">
                   <span>{item.label}</span>
                   <span className="font-semibold">{item.value}</span>

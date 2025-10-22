@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { ORDER_TYPES, REALISM_LEVELS } from './data';
+import { ORDER_TYPES } from './data';
 import { formatCurrency, roundTo } from './utils';
 
 function ToggleGroup({ label, value, onChange, options }) {
@@ -149,9 +149,7 @@ export default function OrderTicket({
   account,
   bestPrice,
   reference,
-  lotSize,
-  realismConfig,
-  baselineRealism = REALISM_LEVELS[0]
+  lotSize
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -167,14 +165,8 @@ export default function OrderTicket({
   const maxLots = Math.max(0.01, maxShares / lotSize);
 
   const basePrice = draft.type === 'market' ? bestPrice : draft.limitPrice ?? bestPrice;
-  const direction = draft.side === 'buy' ? 1 : -1;
-  const slip = (realismConfig.slippageBps / 10000) * basePrice;
-  const fillPriceEstimate = roundTo(basePrice + direction * slip, 2);
-  const baselineSlip = (baselineRealism.slippageBps / 10000) * basePrice;
-  const baselineFill = roundTo(basePrice + direction * baselineSlip, 2);
+  const fillPriceEstimate = roundTo(basePrice, 2);
   const estimatedCost = roundTo(fillPriceEstimate * effectiveQuantity, 2);
-  const baselineCost = roundTo(baselineFill * effectiveQuantity, 2);
-  const costDelta = roundTo(estimatedCost - baselineCost, 2);
   const estimatedFees = roundTo(estimatedCost * 0.0005, 2);
   const costWithFees = estimatedCost + estimatedFees;
   const buyingPowerLeft = roundTo(account.buyingPower - costWithFees, 2);
@@ -409,11 +401,6 @@ export default function OrderTicket({
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Est. cost (fees in)</p>
             <p className="mt-1 font-semibold text-slate-900">{formatCurrency(costWithFees)}</p>
-            {costDelta !== 0 ? (
-              <p className="text-xs text-slate-500">
-                {costDelta > 0 ? '+' : '-'}{formatCurrency(Math.abs(costDelta))} vs {baselineRealism.name}
-              </p>
-            ) : null}
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Buying power left</p>
