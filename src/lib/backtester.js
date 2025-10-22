@@ -1,4 +1,4 @@
-import { BacktestingEngine, DEFAULT_INITIAL_CAPITAL, helpers as indicatorHelpers } from 'backtesting-js';
+import { BacktestingEngine, DEFAULT_INITIAL_CAPITAL, helpers as indicatorHelpers } from '@/vendor/backtesting-js';
 
 const riskFreeRate = 0.02;
 
