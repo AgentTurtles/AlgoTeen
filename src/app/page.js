@@ -45,7 +45,7 @@ export default async function Home() {
               </p>
               <div className="hero-cta-group flex flex-col sm:flex-row gap-4 items-center justify-center mb-6">
                 <Link
-                  href={isAuthenticated ? '/codelab' : '/auth/signup'}
+                  href={isAuthenticated ? '/codelab' : '/auth/signup?callbackUrl=/learn'}
                   className="cta-primary min-h-[52px] px-7"
                   style={{fontSize: '20px', letterSpacing: '-0.4px'}}
                 >

@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
-import { getAlpacaCredentials, storeAlpacaCredentials } from './userStore';
-
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'algoteen-dev-secret';
 const ACCOUNT_URL = process.env.ALPACA_ACCOUNT_URL ?? 'https://paper-api.alpaca.markets/v2/account';
 
@@ -12,16 +10,13 @@ const CRYPTO_BASE = process.env.ALPACA_CRYPTO_BASE_URL ?? 'https://data.alpaca.m
 const FOREX_BASE = process.env.ALPACA_FOREX_BASE_URL ?? 'https://data.alpaca.markets/v1beta1';
 
 async function fetchStoredCredentials(request) {
-  const token = await getToken({ req: request, secret: AUTH_SECRET });
-  const userId = token?.sub;
-  if (!userId) {
+  // Using global Alpaca credentials from environment variables
+  const apiKey = process.env.ALPACA_API_KEY;
+  const secretKey = process.env.ALPACA_SECRET_KEY;
+  if (!apiKey || !secretKey) {
     return null;
   }
-  const credentials = await getAlpacaCredentials(userId);
-  if (!credentials?.apiKey || !credentials?.secretKey) {
-    return null;
-  }
-  return { ...credentials, userId };
+  return { apiKey, secretKey };
 }
 
 export async function validateAlpacaCredentials(apiKey, secretKey) {
@@ -123,10 +118,6 @@ async function alpacaRequest(
         ? data.message ?? data.error ?? 'Failed to reach Alpaca'
         : 'Failed to reach Alpaca';
     return { ok: false, status: response.status, error: message, data };
-  }
-
-  if (path === '/account' && response.ok) {
-    await storeAlpacaCredentials(userId, { apiKey, secretKey, account: data });
   }
 
   return { ok: true, status: response.status, data };

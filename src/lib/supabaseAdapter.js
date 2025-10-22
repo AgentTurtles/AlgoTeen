@@ -18,6 +18,7 @@ function mapUser(row) {
     id: row.id,
     name: row.name ?? null,
     email: row.email ?? null,
+    // Handle both column name variations
     emailVerified: row.email_verified ? new Date(row.email_verified) : null,
     image: row.image ?? null,
     username: row.username ?? row.name ?? null
@@ -67,7 +68,7 @@ function normalizeUserForInsert(data) {
     name: data.name ?? null,
     username: data.username ?? data.name ?? null,
     email: data.email ?? null,
-    email_verified: data.emailVerified ?? null,
+    email_verified: data.emailVerified ? new Date(data.emailVerified) : null,
     image: data.image ?? null
   };
 }

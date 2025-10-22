@@ -74,6 +74,33 @@ function formatCurrency(value) {
   return Number(value.toFixed(2));
 }
 
+// Simulate realistic trading costs and execution
+function calculateCommission(symbol, quantity, price, commissionConfig = {}) {
+  const { perTrade = 0, perShare = 0, percentage = 0 } = commissionConfig;
+  let commission = perTrade;
+  commission += perShare * Math.abs(quantity);
+  commission += percentage * Math.abs(quantity) * price;
+  return formatCurrency(commission);
+}
+
+function simulateSlippage(price, slippageConfig = {}) {
+  const { fixed = 0, percentage = 0 } = slippageConfig;
+  const slippageAmount = fixed + (percentage * price);
+  // Random direction for slippage
+  const direction = Math.random() > 0.5 ? 1 : -1;
+  return formatCurrency(price + (slippageAmount * direction));
+}
+
+function calculatePositionSize(cash, price, sizeConfig = {}) {
+  const { type = 'fixed', value = 1 } = sizeConfig;
+  if (type === 'percentage') {
+    return Math.floor((cash * value / 100) / price);
+  } else if (type === 'fixed') {
+    return Math.min(value, Math.floor(cash / price));
+  }
+  return 1;
+}
+
 const TIMEFRAME_TO_PERIODS_PER_YEAR = {
   '1Day': 252,
   '4Hour': 252 * 6,
@@ -146,10 +173,13 @@ function computeMetrics({ equityCurve, trades, initialCapital, timeframe }) {
 }
 
 export class BacktestingEngine {
-  constructor({ data = [], initialCapital = STARTING_CAPITAL, timeframe = '1Day' } = {}) {
+  constructor({ data = [], initialCapital = STARTING_CAPITAL, timeframe = '1Day', commission = {}, slippage = {}, positionSize = {} } = {}) {
     this.data = data;
     this.initialCapital = initialCapital;
     this.timeframe = timeframe;
+    this.commissionConfig = commission;
+    this.slippageConfig = slippage;
+    this.positionSizeConfig = positionSize;
     this.strategyFactory = null;
   }
 
@@ -174,22 +204,74 @@ export class BacktestingEngine {
     let cash = this.initialCapital;
     let positionSize = 0;
     let entryPrice = 0;
-    let peakEquity = this.initialCapital;
+    let stopLossPrice = null;
+    let takeProfitPrice = null;
+    let totalCommission = 0;
 
     this.data.forEach((bar, index) => {
+      const currentPrice = bar.close;
       const state = {
         positionSize,
         entryPrice,
         cash: formatCurrency(cash),
-        equity: formatCurrency(cash + positionSize * bar.close)
+        equity: formatCurrency(cash + positionSize * currentPrice),
+        stopLoss: stopLossPrice,
+        takeProfit: takeProfitPrice
       };
 
+      // Check stop-loss and take-profit first
+      let forcedExit = false;
+      let exitReason = null;
+      if (positionSize > 0) {
+        if (stopLossPrice && currentPrice <= stopLossPrice) {
+          forcedExit = true;
+          exitReason = 'Stop-loss triggered';
+        } else if (takeProfitPrice && currentPrice >= takeProfitPrice) {
+          forcedExit = true;
+          exitReason = 'Take-profit triggered';
+        }
+      } else if (positionSize < 0) {
+        if (stopLossPrice && currentPrice >= stopLossPrice) {
+          forcedExit = true;
+          exitReason = 'Stop-loss triggered';
+        } else if (takeProfitPrice && currentPrice <= takeProfitPrice) {
+          forcedExit = true;
+          exitReason = 'Take-profit triggered';
+        }
+      }
+
+      if (forcedExit) {
+        const executionPrice = simulateSlippage(currentPrice, this.slippageConfig);
+        const commission = calculateCommission('', Math.abs(positionSize), executionPrice, this.commissionConfig);
+        const proceeds = executionPrice * Math.abs(positionSize);
+        cash += proceeds - commission;
+        totalCommission += commission;
+        const profitLoss = (executionPrice - entryPrice) * positionSize - commission;
+
+        trades.push({
+          type: 'exit',
+          price: executionPrice,
+          size: Math.abs(positionSize),
+          index,
+          time: bar.timestamp ?? bar.date ?? index,
+          profitLoss: Number(profitLoss.toFixed(2)),
+          note: exitReason,
+          side: positionSize < 0 ? 'short' : 'long',
+          commission
+        });
+        positionSize = 0;
+        entryPrice = 0;
+        stopLossPrice = null;
+        takeProfitPrice = null;
+      }
+
+      // Get strategy decision
       let decision;
       try {
         decision = strategy({
           data: this.data,
           index,
-          price: bar.close,
+          price: currentPrice,
           bar,
           state,
           helpers: indicatorHelpers
@@ -202,87 +284,102 @@ export class BacktestingEngine {
         throw error;
       }
 
-      if (decision && typeof decision === 'object') {
+      if (decision && typeof decision === 'object' && !forcedExit) {
         const action = decision.action;
-        const size = Number.isFinite(decision.size) ? Math.max(0, decision.size) : 1;
+        const size = decision.size || this.positionSizeConfig;
+        const stopLoss = decision.stopLoss;
+        const takeProfit = decision.takeProfit;
 
-        if (action === 'buy' && positionSize === 0) {
-          const cost = bar.close * size;
-          if (cost > cash) {
-            throw new Error(
-              `Buy signal on ${bar.date ?? bar.timestamp ?? index} requires ${formatCurrency(cost)} but only ${formatCurrency(
-                cash
-              )} is available.`
-            );
+        if ((action === 'buy' || action === 'sell') && positionSize === 0) {
+          const executionPrice = simulateSlippage(currentPrice, this.slippageConfig);
+          const calculatedSize = calculatePositionSize(cash, executionPrice, size);
+          const cost = executionPrice * calculatedSize;
+          const commission = calculateCommission('', calculatedSize, executionPrice, this.commissionConfig);
+
+          if (cost + commission > cash) {
+            logs.push({
+              level: 'warning',
+              message: `Insufficient funds for ${action} on ${bar.date ?? bar.timestamp ?? index}: need ${formatCurrency(cost + commission)}, have ${formatCurrency(cash)}`
+            });
+          } else {
+            cash -= cost + commission;
+            totalCommission += commission;
+            positionSize = action === 'buy' ? calculatedSize : -calculatedSize;
+            entryPrice = executionPrice;
+
+            // Set stop-loss and take-profit if provided
+            if (stopLoss) {
+              stopLossPrice = action === 'buy' ? executionPrice * (1 - stopLoss / 100) : executionPrice * (1 + stopLoss / 100);
+            }
+            if (takeProfit) {
+              takeProfitPrice = action === 'buy' ? executionPrice * (1 + takeProfit / 100) : executionPrice * (1 - takeProfit / 100);
+            }
+
+            trades.push({
+              type: 'entry',
+              side: action === 'buy' ? 'long' : 'short',
+              price: executionPrice,
+              size: calculatedSize,
+              index,
+              time: bar.timestamp ?? bar.date ?? index,
+              note: decision.note ?? null,
+              commission
+            });
           }
-          cash -= cost;
-          positionSize = size;
-          entryPrice = bar.close;
-          trades.push({
-            type: 'entry',
-            side: 'long',
-            price: bar.close,
-            size,
-            index,
-            time: bar.timestamp ?? bar.date ?? index,
-            note: decision.note ?? null
-          });
-        } else if (action === 'sell' && positionSize === 0) {
-          const proceeds = bar.close * size;
-          cash += proceeds;
-          positionSize = -size;
-          entryPrice = bar.close;
-          trades.push({
-            type: 'entry',
-            side: 'short',
-            price: bar.close,
-            size,
-            index,
-            time: bar.timestamp ?? bar.date ?? index,
-            note: decision.note ?? null
-          });
         } else if (action === 'exit' && positionSize !== 0) {
-          const proceeds = bar.close * positionSize;
-          cash += proceeds;
-          const profitLoss = (bar.close - entryPrice) * positionSize;
+          const executionPrice = simulateSlippage(currentPrice, this.slippageConfig);
+          const commission = calculateCommission('', Math.abs(positionSize), executionPrice, this.commissionConfig);
+          const proceeds = executionPrice * Math.abs(positionSize);
+          cash += proceeds - commission;
+          totalCommission += commission;
+          const profitLoss = (executionPrice - entryPrice) * positionSize - commission;
+
           trades.push({
             type: 'exit',
-            price: bar.close,
+            price: executionPrice,
             size: Math.abs(positionSize),
             index,
             time: bar.timestamp ?? bar.date ?? index,
             profitLoss: Number(profitLoss.toFixed(2)),
             note: decision.note ?? null,
-            side: positionSize < 0 ? 'short' : 'long'
+            side: positionSize < 0 ? 'short' : 'long',
+            commission
           });
           positionSize = 0;
           entryPrice = 0;
+          stopLossPrice = null;
+          takeProfitPrice = null;
         }
       }
 
-      const equity = formatCurrency(cash + positionSize * bar.close);
+      const equity = formatCurrency(cash + positionSize * currentPrice);
       equityCurve.push({
         index,
         time: bar.timestamp ?? bar.date ?? index,
         equity
       });
-      peakEquity = Math.max(peakEquity, equity);
     });
 
+    // Handle open position at end
     if (positionSize !== 0) {
       const lastBar = this.data[this.data.length - 1];
-      const proceeds = lastBar.close * positionSize;
-      cash += proceeds;
-      const profitLoss = (lastBar.close - entryPrice) * positionSize;
+      const executionPrice = simulateSlippage(lastBar.close, this.slippageConfig);
+      const commission = calculateCommission('', Math.abs(positionSize), executionPrice, this.commissionConfig);
+      const proceeds = executionPrice * Math.abs(positionSize);
+      cash += proceeds - commission;
+      totalCommission += commission;
+      const profitLoss = (executionPrice - entryPrice) * positionSize - commission;
+
       trades.push({
         type: 'exit',
-        price: lastBar.close,
+        price: executionPrice,
         size: Math.abs(positionSize),
         index: this.data.length - 1,
         time: lastBar.timestamp ?? lastBar.date ?? this.data.length - 1,
         profitLoss: Number(profitLoss.toFixed(2)),
         note: 'Forced exit at end of series',
-        side: positionSize < 0 ? 'short' : 'long'
+        side: positionSize < 0 ? 'short' : 'long',
+        commission
       });
       const equity = formatCurrency(cash);
       equityCurve.push({
@@ -299,6 +396,9 @@ export class BacktestingEngine {
       timeframe: this.timeframe
     });
 
+    // Add commission to metrics
+    metrics.totalCommission = formatCurrency(totalCommission);
+
     return {
       metrics,
       trades,
@@ -308,8 +408,8 @@ export class BacktestingEngine {
   }
 }
 
-export function runBacktest({ data, strategy, initialCapital = STARTING_CAPITAL, timeframe = '1Day' }) {
-  const engine = new BacktestingEngine({ data, initialCapital, timeframe });
+export function runBacktest({ data, strategy, initialCapital = STARTING_CAPITAL, timeframe = '1Day', commission = {}, slippage = {}, positionSize = {} }) {
+  const engine = new BacktestingEngine({ data, initialCapital, timeframe, commission, slippage, positionSize });
   engine.setStrategy(() => strategy);
   return engine.run();
 }

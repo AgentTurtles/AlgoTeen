@@ -1,4 +1,4 @@
-import { BacktestingEngine, DEFAULT_INITIAL_CAPITAL, helpers as indicatorHelpers } from '@/vendor/backtesting-js';
+import { runBacktest as libraryRunBacktest, DEFAULT_INITIAL_CAPITAL, helpers as indicatorHelpers } from '@/vendor/backtesting-js';
 
 const riskFreeRate = 0.02;
 
@@ -36,7 +36,13 @@ export const STRATEGY_TEMPLATES = {
   const exitSignal = rsi >= 70;
 
   if (uptrend && state.positionSize === 0) {
-    return { action: 'buy', note: 'Fast EMA crossed above slow EMA' };
+    return {
+      action: 'buy',
+      size: { type: 'percentage', value: 20 },
+      stopLoss: 5,
+      takeProfit: 10,
+      note: 'Fast EMA crossed above slow EMA'
+    };
   }
 
   if (state.positionSize > 0 && exitSignal) {
@@ -49,21 +55,27 @@ export const STRATEGY_TEMPLATES = {
   swingChannel: {
     id: 'swingChannel',
     name: 'Swing channel fade',
-    description: 'Fade a one-and-a-half percent channel around a 20-day SMA.',
+    description: 'Fade a 5% channel around a 20-day SMA with realistic position sizing and risk management.',
     code: `function strategy({ data, index, price, helpers, state }) {
   const mid = helpers.sma(data, index, 20);
   if (mid === null) {
     return { action: 'hold' };
   }
-  const upper = mid * 1.015;
-  const lower = mid * 0.985;
+  const upper = mid * 1.05;  // 5% upper band
+  const lower = mid * 0.95;  // 5% lower band
 
   if (price < lower && state.positionSize === 0) {
-    return { action: 'buy', note: 'Price dipped under 1.5% band' };
+    return {
+      action: 'buy',
+      size: { type: 'percentage', value: 15 },
+      stopLoss: 4,
+      takeProfit: 8,
+      note: 'Price dipped under 5% band - mean reversion opportunity'
+    };
   }
 
   if (state.positionSize > 0 && price >= upper) {
-    return { action: 'exit', note: 'Tagged upper band for exit' };
+    return { action: 'exit', note: 'Tagged upper band for profit taking' };
   }
 
   return { action: 'hold' };
@@ -72,21 +84,27 @@ export const STRATEGY_TEMPLATES = {
   breakout: {
     id: 'breakout',
     name: 'High breakout ride',
-    description: 'Enter on 30-day highs with trailing exits under swing lows.',
+    description: 'Enter on 20-day highs with trailing exits under swing lows and comprehensive risk management.',
     code: `function strategy({ data, index, price, helpers, state }) {
-  const recentHigh = helpers.highest(data, index, 30, (bar) => bar.close);
-  const trailingLow = helpers.lowest(data, index, 10, (bar) => bar.low);
+  const recentHigh = helpers.highest(data, index, 20, (bar) => bar.close);
+  const trailingLow = helpers.lowest(data, index, 15, (bar) => bar.low);
 
   if (recentHigh === null || trailingLow === null) {
     return { action: 'hold' };
   }
 
   if (price >= recentHigh && state.positionSize === 0) {
-    return { action: 'buy', note: 'New 30-day closing high' };
+    return {
+      action: 'buy',
+      size: { type: 'percentage', value: 20 },
+      stopLoss: 6,
+      takeProfit: 12,
+      note: 'New 20-day closing high - momentum breakout'
+    };
   }
 
   if (state.positionSize > 0 && price <= trailingLow) {
-    return { action: 'exit', note: 'Fell beneath 10-day swing low' };
+    return { action: 'exit', note: 'Fell beneath 15-day swing low - trend reversal' };
   }
 
   return { action: 'hold' };
@@ -186,21 +204,26 @@ function extractActionLineNumbers(code) {
   return actions;
 }
 
-export function runBacktest(code, { initialCapital = STARTING_CAPITAL, dataset, timeframe = '1Day' } = {}) {
+export function runBacktest(code, { initialCapital = STARTING_CAPITAL, dataset, timeframe = '1Day', commission = { perTrade: 0, perShare: 0, percentage: 0 }, slippage = { fixed: 0, percentage: 0.001 }, positionSize = { type: 'percentage', value: 10 } } = {}) {
   if (!Array.isArray(dataset) || dataset.length === 0) {
     throw new Error('No brokerage market data is available. Load bars before running a backtest.');
   }
 
   const normalized = normaliseDataset(dataset);
   const strategyFactory = compileStrategy(code);
+  const userStrategy = strategyFactory(indicatorHelpers);
 
-  const engine = new BacktestingEngine({ data: normalized, initialCapital, timeframe });
-  engine.setStrategy(({ helpers, data }) => {
-    const userStrategy = strategyFactory(helpers);
-    return (payload) => userStrategy({ ...payload, data, helpers });
+  const result = libraryRunBacktest({
+    data: normalized,
+    strategy: (payload) => userStrategy({ ...payload, data: normalized, helpers: indicatorHelpers }),
+    initialCapital,
+    timeframe,
+    commission,
+    slippage,
+    positionSize
   });
 
-  const { equityCurve: rawEquity, trades: rawTrades } = engine.run();
+  const { metrics: libraryMetrics, trades: rawTrades, equityCurve: rawEquity, logs } = result;
   const { trades, actionsHit } = aggregateTrades(rawTrades, normalized);
 
   const equityCurve = rawEquity.map((point) => ({
@@ -209,10 +232,8 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL, dataset, 
   }));
 
   const finalEquity = equityCurve.length ? equityCurve[equityCurve.length - 1].value : initialCapital;
-  const totalReturn = initialCapital === 0 ? 0 : Number((((finalEquity - initialCapital) / initialCapital) * 100).toFixed(2));
   const totalTrades = trades.length;
   const wins = trades.filter((trade) => trade.profit > 0).length;
-  const winRate = totalTrades ? Number(((wins / totalTrades) * 100).toFixed(2)) : 0;
   const averageReturn = totalTrades
     ? Number((trades.reduce((sum, trade) => sum + trade.returnPct, 0) / totalTrades).toFixed(2))
     : 0;
@@ -221,7 +242,7 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL, dataset, 
   const barsPerDay = TIMEFRAME_TO_BARS_PER_DAY[timeframe] ?? 1;
   const years = normalized.length / periodsPerYear;
   const totalReturnRatio = initialCapital === 0 ? 0 : finalEquity / initialCapital;
-  const cagr = years > 0 && totalReturnRatio > 0 ? Number(((totalReturnRatio ** (1 / years) - 1) * 100).toFixed(2)) : totalReturn;
+  const cagr = years > 0 && totalReturnRatio > 0 ? Number(((totalReturnRatio ** (1 / years) - 1) * 100).toFixed(2)) : libraryMetrics.totalReturn;
 
   const returns = [];
   for (let i = 1; i < equityCurve.length; i += 1) {
@@ -238,7 +259,6 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL, dataset, 
   const stdDev = Math.sqrt(Math.max(variance, 0));
   const annualisedReturn = meanReturn * periodsPerYear;
   const annualisedStd = stdDev * Math.sqrt(periodsPerYear);
-  const sharpe = annualisedStd ? Number(((annualisedReturn - riskFreeRate) / annualisedStd).toFixed(2)) : 0;
 
   const downsideReturns = returns.filter((value) => value < 0);
   const downsideMean = downsideReturns.length
@@ -285,16 +305,17 @@ export function runBacktest(code, { initialCapital = STARTING_CAPITAL, dataset, 
     metrics: {
       startingCapital: Number(initialCapital.toFixed(2)),
       endingCapital: Number(finalEquity.toFixed(2)),
-      totalReturn,
-      totalTrades,
-      winRate,
+      totalReturn: libraryMetrics.totalReturn,
+      totalTrades: libraryMetrics.trades,
+      winRate: libraryMetrics.winRate,
       averageReturn,
-      maxDrawdown: Number(maxDrawdown.toFixed(2)),
+      maxDrawdown: libraryMetrics.maxDrawdown,
       cagr,
-      sharpe,
+      sharpe: libraryMetrics.sharpeRatio,
       sortino,
       avgHoldDays,
-      exposure
+      exposure,
+      totalCommission: libraryMetrics.totalCommission || 0
     },
     coverage: {
       bars: normalized.length,
