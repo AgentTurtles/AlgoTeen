@@ -1,101 +1,6 @@
-const STARTING_CAPITAL = 10000;
+import { runBacktest as libraryRunBacktest, DEFAULT_INITIAL_CAPITAL, helpers as indicatorHelpers } from '@/vendor/backtesting-js';
+
 const riskFreeRate = 0.02;
-
-const indicatorHelpers = {
-  sma(data, index, length) {
-    if (index + 1 < length) {
-      return null;
-    }
-
-    let total = 0;
-    for (let i = index - length + 1; i <= index; i += 1) {
-      total += data[i].close;
-    }
-
-    return Number((total / length).toFixed(4));
-  },
-  ema(data, index, length) {
-    if (length <= 1) {
-      return Number(data[index].close.toFixed(4));
-    }
-
-    if (index + 1 < length) {
-      return null;
-    }
-
-    const smoothing = 2 / (length + 1);
-    let emaValue = data[index - length + 1].close;
-
-    for (let i = index - length + 2; i <= index; i += 1) {
-      emaValue = data[i].close * smoothing + emaValue * (1 - smoothing);
-    }
-
-    return Number(emaValue.toFixed(4));
-  },
-  rsi(data, index, length) {
-    if (index < length) {
-      return null;
-    }
-
-    let gains = 0;
-    let losses = 0;
-
-    for (let i = index - length + 1; i <= index; i += 1) {
-      const change = data[i].close - data[i - 1].close;
-      if (change > 0) {
-        gains += change;
-      } else {
-        losses -= change;
-      }
-    }
-
-    if (losses === 0) {
-      return 100;
-    }
-
-    const averageGain = gains / length;
-    const averageLoss = losses / length;
-    const rs = averageGain / averageLoss;
-    const rsi = 100 - 100 / (1 + rs);
-
-    return Number(rsi.toFixed(2));
-  },
-  highest(data, index, length, accessor = (bar) => bar.high) {
-    if (index + 1 < length) {
-      return null;
-    }
-
-    let highestValue = -Infinity;
-    for (let i = index - length + 1; i <= index; i += 1) {
-      highestValue = Math.max(highestValue, accessor(data[i]));
-    }
-
-    return Number(highestValue.toFixed(4));
-  },
-  lowest(data, index, length, accessor = (bar) => bar.low) {
-    if (index + 1 < length) {
-      return null;
-    }
-
-    let lowestValue = Infinity;
-    for (let i = index - length + 1; i <= index; i += 1) {
-      lowestValue = Math.min(lowestValue, accessor(data[i]));
-    }
-
-    return Number(lowestValue.toFixed(4));
-  },
-  percentChange(current, previous) {
-    if (!previous || previous === 0) {
-      return 0;
-    }
-
-    return Number((((current - previous) / previous) * 100).toFixed(2));
-  }
-};
-
-function formatCurrency(value) {
-  return Number(value.toFixed(2));
-}
 
 const TIMEFRAME_TO_PERIODS_PER_YEAR = {
   '1Day': 252,
@@ -111,184 +16,242 @@ const TIMEFRAME_TO_BARS_PER_DAY = {
   '15Min': 96
 };
 
-export function runBacktest(
-  code,
-  { initialCapital = STARTING_CAPITAL, dataset, timeframe = '1Day' } = {}
-) {
+export const STARTING_CAPITAL = DEFAULT_INITIAL_CAPITAL;
+
+export const STRATEGY_TEMPLATES = {
+  momentumPulse: {
+    id: 'momentumPulse',
+    name: 'Momentum pulse',
+    description: 'Dual EMA trend with RSI exit and protective stop.',
+    code: `function strategy({ data, index, price, helpers, state }) {
+  const fast = helpers.ema(data, index, 8);
+  const slow = helpers.ema(data, index, 21);
+  const rsi = helpers.rsi(data, index, 14);
+
+  if (fast === null || slow === null || rsi === null) {
+    return { action: 'hold' };
+  }
+
+  const uptrend = fast > slow;
+  const exitSignal = rsi >= 70;
+
+  if (uptrend && state.positionSize === 0) {
+    return {
+      action: 'buy',
+      size: { type: 'percentage', value: 20 },
+      stopLoss: 5,
+      takeProfit: 10,
+      note: 'Fast EMA crossed above slow EMA'
+    };
+  }
+
+  if (state.positionSize > 0 && exitSignal) {
+    return { action: 'exit', note: 'RSI stretched into overbought' };
+  }
+
+  return { action: 'hold' };
+}`
+  },
+  swingChannel: {
+    id: 'swingChannel',
+    name: 'Swing channel fade',
+    description: 'Fade a 5% channel around a 20-day SMA with realistic position sizing and risk management.',
+    code: `function strategy({ data, index, price, helpers, state }) {
+  const mid = helpers.sma(data, index, 20);
+  if (mid === null) {
+    return { action: 'hold' };
+  }
+  const upper = mid * 1.05;  // 5% upper band
+  const lower = mid * 0.95;  // 5% lower band
+
+  if (price < lower && state.positionSize === 0) {
+    return {
+      action: 'buy',
+      size: { type: 'percentage', value: 15 },
+      stopLoss: 4,
+      takeProfit: 8,
+      note: 'Price dipped under 5% band - mean reversion opportunity'
+    };
+  }
+
+  if (state.positionSize > 0 && price >= upper) {
+    return { action: 'exit', note: 'Tagged upper band for profit taking' };
+  }
+
+  return { action: 'hold' };
+}`
+  },
+  breakout: {
+    id: 'breakout',
+    name: 'High breakout ride',
+    description: 'Enter on 20-day highs with trailing exits under swing lows and comprehensive risk management.',
+    code: `function strategy({ data, index, price, helpers, state }) {
+  const recentHigh = helpers.highest(data, index, 20, (bar) => bar.close);
+  const trailingLow = helpers.lowest(data, index, 15, (bar) => bar.low);
+
+  if (recentHigh === null || trailingLow === null) {
+    return { action: 'hold' };
+  }
+
+  if (price >= recentHigh && state.positionSize === 0) {
+    return {
+      action: 'buy',
+      size: { type: 'percentage', value: 20 },
+      stopLoss: 6,
+      takeProfit: 12,
+      note: 'New 20-day closing high - momentum breakout'
+    };
+  }
+
+  if (state.positionSize > 0 && price <= trailingLow) {
+    return { action: 'exit', note: 'Fell beneath 15-day swing low - trend reversal' };
+  }
+
+  return { action: 'hold' };
+}`
+  }
+};
+
+export const DEFAULT_STRATEGY_CODE = STRATEGY_TEMPLATES.momentumPulse.code;
+
+function compileStrategy(code) {
   if (typeof code !== 'string' || code.trim().length === 0) {
     throw new Error('Strategy code must be a non-empty string.');
   }
 
-  const priceData = Array.isArray(dataset) ? dataset : [];
-
-  if (priceData.length === 0) {
-    throw new Error('No brokerage market data is available. Load bars before running a backtest.');
-  }
-
-  let strategyFactory;
-
+  const wrapped = `"use strict";${code}\nif (typeof strategy !== 'function') { throw new Error('Strategy code must define a function named "strategy".'); }\nreturn strategy;`;
   try {
-    strategyFactory = new Function(
-      'helpers',
-      `${code}\nif (typeof strategy !== 'function') { throw new Error('Strategy code must define a function named "strategy".'); }\nreturn strategy;`
-    );
+    return new Function('helpers', wrapped);
   } catch (error) {
     throw new Error(`Unable to compile strategy: ${error.message}`);
   }
+}
 
-  let strategy;
-
-  try {
-    strategy = strategyFactory(indicatorHelpers);
-  } catch (error) {
-    throw new Error(`Failed to initialize strategy: ${error.message}`);
-  }
-
-  if (typeof strategy !== 'function') {
-    throw new Error('Compiled strategy is not a function.');
-  }
-
-  const trades = [];
-  const equityCurve = [];
-
-  let cash = initialCapital;
-  let positionSize = 0;
-  let entryPrice = 0;
-  let openTrade = null;
-  let peakEquity = initialCapital;
-  let maxDrawdown = 0;
-
-  const returns = [];
-  const holdDurations = [];
-  let previousEquity = initialCapital;
-  let timeInMarket = 0;
-  let signalsTriggered = 0;
-  const actionsHit = new Set();
-
-  priceData.forEach((bar, index) => {
-    const state = {
-      positionSize,
-      entryPrice,
-      cash: formatCurrency(cash),
-      equity: formatCurrency(cash + positionSize * bar.close)
+function normaliseDataset(dataset = []) {
+  return dataset.map((bar, index) => {
+    const open = Number.parseFloat(bar.open ?? bar.o ?? bar.Open ?? bar.close ?? bar.c ?? 0) || 0;
+    const high = Number.parseFloat(bar.high ?? bar.h ?? bar.High ?? open) || open;
+    const low = Number.parseFloat(bar.low ?? bar.l ?? bar.Low ?? open) || open;
+    const close = Number.parseFloat(bar.close ?? bar.c ?? bar.Close ?? open) || open;
+    const volume = Number.parseFloat(bar.volume ?? bar.v ?? bar.Volume ?? 0) || 0;
+    const timestamp = bar.timestamp ?? bar.t ?? bar.date ?? bar.Time ?? index;
+    return {
+      open,
+      high,
+      low,
+      close,
+      volume,
+      timestamp,
+      date: bar.date ?? bar.time ?? null
     };
+  });
+}
 
-    let decision;
-
-    try {
-      decision = strategy({
-        data: priceData,
-        index,
-        price: bar.close,
-        bar,
-        state,
-        helpers: indicatorHelpers
+function aggregateTrades(rawTrades, data) {
+  const trades = [];
+  let openTrade = null;
+  const actionsHit = new Set();
+  rawTrades.forEach((event) => {
+    if (event.type === 'entry') {
+      openTrade = {
+        entryDate: event.time,
+        entryPrice: Number(event.price.toFixed(2)),
+        size: event.size,
+        entryNote: event.note ?? null,
+        entryIndex: event.index
+      };
+      actionsHit.add(event.side === 'short' ? 'sell' : 'buy');
+    }
+    if (event.type === 'exit' && openTrade) {
+      const durationBars = event.index - openTrade.entryIndex;
+      const profit = Number(event.profitLoss.toFixed(2));
+      const entryPrice = openTrade.entryPrice;
+      const directionalReturn = event.side === 'short' ? entryPrice - event.price : event.price - entryPrice;
+      const returnPct = entryPrice === 0 ? 0 : Number(((directionalReturn / entryPrice) * 100).toFixed(2));
+      trades.push({
+        ...openTrade,
+        exitDate: event.time,
+        exitPrice: Number(event.price.toFixed(2)),
+        profit,
+        returnPct,
+        exitNote: event.note ?? null,
+        exitIndex: event.index,
+        durationBars
       });
-    } catch (error) {
-      throw new Error(`Error while executing strategy on ${bar.date}: ${error.message}`);
-    }
-
-    if (decision && typeof decision === 'object') {
-      const action = decision.action;
-      const size = Number.isFinite(decision.size) ? Math.max(0, decision.size) : 1;
-
-      if (action === 'buy' && positionSize === 0) {
-        const cost = bar.close * size;
-        if (cost > cash) {
-          throw new Error(`Buy signal on ${bar.date} requires ${formatCurrency(cost)} but only ${formatCurrency(cash)} is available.`);
-        }
-
-        cash -= cost;
-        positionSize = size;
-        entryPrice = bar.close;
-        openTrade = {
-          entryDate: bar.date,
-          entryPrice: formatCurrency(bar.close),
-          size,
-          entryNote: decision.note || 'Buy signal',
-          entryIndex: index
-        };
-        actionsHit.add('buy');
-        signalsTriggered += 1;
-      }
-
-      if ((action === 'sell' || action === 'exit') && positionSize > 0) {
-        cash += bar.close * positionSize;
-        const profit = (bar.close - entryPrice) * positionSize;
-        const returnPct = indicatorHelpers.percentChange(bar.close, entryPrice);
-        const durationBars = openTrade?.entryIndex !== undefined ? index - openTrade.entryIndex : 0;
-        if (durationBars > 0) {
-          holdDurations.push(durationBars);
-        }
-
-        trades.push({
-          ...openTrade,
-          exitDate: bar.date,
-          exitPrice: formatCurrency(bar.close),
-          profit: formatCurrency(profit),
-          returnPct,
-          exitNote: decision.note || 'Exit signal'
-        });
-
-        positionSize = 0;
-        entryPrice = 0;
-        openTrade = null;
-        actionsHit.add(action === 'sell' ? 'sell' : 'exit');
-        signalsTriggered += 1;
-      }
-    }
-
-    const equity = cash + positionSize * bar.close;
-    equityCurve.push({ date: bar.date, value: formatCurrency(equity) });
-    if (previousEquity !== 0) {
-      returns.push((equity - previousEquity) / previousEquity);
-    }
-    previousEquity = equity;
-    peakEquity = Math.max(peakEquity, equity);
-    const drawdown = (equity - peakEquity) / peakEquity;
-    maxDrawdown = Math.min(maxDrawdown, drawdown);
-    if (positionSize > 0) {
-      timeInMarket += 1;
+      actionsHit.add('exit');
+      openTrade = null;
     }
   });
+  return { trades, actionsHit };
+}
 
-  if (positionSize > 0) {
-    const lastBar = priceData[priceData.length - 1];
-    cash += lastBar.close * positionSize;
-    const profit = (lastBar.close - entryPrice) * positionSize;
-    const returnPct = indicatorHelpers.percentChange(lastBar.close, entryPrice);
-    const durationBars = openTrade?.entryIndex !== undefined ? priceData.length - openTrade.entryIndex - 1 : 0;
-    if (durationBars > 0) {
-      holdDurations.push(durationBars);
-    }
-
-    trades.push({
-      ...openTrade,
-      exitDate: lastBar.date,
-      exitPrice: formatCurrency(lastBar.close),
-      profit: formatCurrency(profit),
-      returnPct,
-      exitNote: 'Auto-closed at end of dataset'
+function extractActionLineNumbers(code) {
+  const lines = String(code || '').split('\n');
+  const actions = {
+    buy: [],
+    sell: [],
+    exit: [],
+    short: []
+  };
+  lines.forEach((line, index) => {
+    const normalized = line.trim();
+    Object.keys(actions).forEach((action) => {
+      if (normalized.includes(`'${action}'`) || normalized.includes(`"${action}"`)) {
+        actions[action].push(index + 1);
+      }
     });
+  });
+  return actions;
+}
 
-    positionSize = 0;
+export function runBacktest(code, { initialCapital = STARTING_CAPITAL, dataset, timeframe = '1Day', commission = { perTrade: 0, perShare: 0, percentage: 0 }, slippage = { fixed: 0, percentage: 0.001 }, positionSize = { type: 'percentage', value: 10 } } = {}) {
+  if (!Array.isArray(dataset) || dataset.length === 0) {
+    throw new Error('No brokerage market data is available. Load bars before running a backtest.');
   }
 
-  const finalEquity = cash;
-  const totalReturn = indicatorHelpers.percentChange(finalEquity, initialCapital);
+  const normalized = normaliseDataset(dataset);
+  const strategyFactory = compileStrategy(code);
+  const userStrategy = strategyFactory(indicatorHelpers);
+
+  const result = libraryRunBacktest({
+    data: normalized,
+    strategy: (payload) => userStrategy({ ...payload, data: normalized, helpers: indicatorHelpers }),
+    initialCapital,
+    timeframe,
+    commission,
+    slippage,
+    positionSize
+  });
+
+  const { metrics: libraryMetrics, trades: rawTrades, equityCurve: rawEquity, logs } = result;
+  const { trades, actionsHit } = aggregateTrades(rawTrades, normalized);
+
+  const equityCurve = rawEquity.map((point) => ({
+    date: normalized[point.index]?.date ?? normalized[point.index]?.timestamp ?? point.index,
+    value: Number(point.equity.toFixed(2))
+  }));
+
+  const finalEquity = equityCurve.length ? equityCurve[equityCurve.length - 1].value : initialCapital;
   const totalTrades = trades.length;
   const wins = trades.filter((trade) => trade.profit > 0).length;
-  const winRate = totalTrades ? Number(((wins / totalTrades) * 100).toFixed(2)) : 0;
   const averageReturn = totalTrades
     ? Number((trades.reduce((sum, trade) => sum + trade.returnPct, 0) / totalTrades).toFixed(2))
     : 0;
 
   const periodsPerYear = TIMEFRAME_TO_PERIODS_PER_YEAR[timeframe] ?? 252;
   const barsPerDay = TIMEFRAME_TO_BARS_PER_DAY[timeframe] ?? 1;
-  const years = priceData.length / periodsPerYear;
+  const years = normalized.length / periodsPerYear;
   const totalReturnRatio = initialCapital === 0 ? 0 : finalEquity / initialCapital;
-  const cagr = years > 0 && totalReturnRatio > 0 ? (Math.pow(totalReturnRatio, 1 / years) - 1) * 100 : totalReturn;
+  const cagr = years > 0 && totalReturnRatio > 0 ? Number(((totalReturnRatio ** (1 / years) - 1) * 100).toFixed(2)) : libraryMetrics.totalReturn;
 
+  const returns = [];
+  for (let i = 1; i < equityCurve.length; i += 1) {
+    const prev = equityCurve[i - 1].value;
+    const curr = equityCurve[i].value;
+    if (prev > 0) {
+      returns.push((curr - prev) / prev);
+    }
+  }
   const meanReturn = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
   const variance = returns.length
     ? returns.reduce((sum, value) => sum + (value - meanReturn) ** 2, 0) / returns.length
@@ -296,7 +259,6 @@ export function runBacktest(
   const stdDev = Math.sqrt(Math.max(variance, 0));
   const annualisedReturn = meanReturn * periodsPerYear;
   const annualisedStd = stdDev * Math.sqrt(periodsPerYear);
-  const sharpe = annualisedStd ? (annualisedReturn - riskFreeRate) / annualisedStd : 0;
 
   const downsideReturns = returns.filter((value) => value < 0);
   const downsideMean = downsideReturns.length
@@ -306,14 +268,19 @@ export function runBacktest(
     ? downsideReturns.reduce((sum, value) => sum + (value - downsideMean) ** 2, 0) / downsideReturns.length
     : 0;
   const downsideStd = Math.sqrt(Math.max(downsideVariance, 0));
-  const sortino = downsideStd ? (annualisedReturn - riskFreeRate) / (downsideStd * Math.sqrt(periodsPerYear)) : 0;
+  const sortino = downsideStd ? Number(((annualisedReturn - riskFreeRate) / (downsideStd * Math.sqrt(periodsPerYear))).toFixed(2)) : 0;
 
-  const avgHoldDays = holdDurations.length
-    ? Number((holdDurations.reduce((sum, value) => sum + value, 0) / holdDurations.length / barsPerDay).toFixed(2))
+  const avgHoldDays = trades.length
+    ? Number((trades.reduce((sum, trade) => sum + (trade.durationBars ?? 0), 0) / trades.length / barsPerDay).toFixed(2))
     : 0;
-  const exposure = priceData.length
-    ? Number(((timeInMarket / priceData.length) * 100).toFixed(2))
-    : 0;
+  const timeInMarket = trades.reduce((sum, trade) => sum + (trade.durationBars ?? 0), 0);
+  const exposure = normalized.length ? Number(((timeInMarket / normalized.length) * 100).toFixed(2)) : 0;
+
+  const peakEquity = equityCurve.reduce((peak, point) => Math.max(peak, point.value), initialCapital);
+  const maxDrawdown = equityCurve.reduce((max, point) => {
+    const drawdown = peakEquity > 0 ? ((point.value - peakEquity) / peakEquity) * 100 : 0;
+    return Math.min(max, drawdown);
+  }, 0);
 
   const actionLineMap = extractActionLineNumbers(code);
   const coverageActions = Object.keys(actionLineMap).reduce((acc, action) => {
@@ -332,26 +299,27 @@ export function runBacktest(
     .flatMap(([, value]) => value.lines);
 
   return {
-    dataset: priceData,
+    dataset: normalized,
     trades,
     equityCurve,
     metrics: {
-      startingCapital: formatCurrency(initialCapital),
-      endingCapital: formatCurrency(finalEquity),
-      totalReturn,
-      totalTrades,
-      winRate,
+      startingCapital: Number(initialCapital.toFixed(2)),
+      endingCapital: Number(finalEquity.toFixed(2)),
+      totalReturn: libraryMetrics.totalReturn,
+      totalTrades: libraryMetrics.trades,
+      winRate: libraryMetrics.winRate,
       averageReturn,
-      maxDrawdown: Number((maxDrawdown * 100).toFixed(2)),
-      cagr: Number(cagr.toFixed(2)),
-      sharpe: Number(sharpe.toFixed(2)),
-      sortino: Number(sortino.toFixed(2)),
+      maxDrawdown: libraryMetrics.maxDrawdown,
+      cagr,
+      sharpe: libraryMetrics.sharpeRatio,
+      sortino,
       avgHoldDays,
-      exposure
+      exposure,
+      totalCommission: libraryMetrics.totalCommission || 0
     },
     coverage: {
-      bars: priceData.length,
-      signals: signalsTriggered,
+      bars: normalized.length,
+      signals: trades.length * 2,
       actions: coverageActions,
       uncoveredLineNumbers
     },
@@ -359,104 +327,4 @@ export function runBacktest(
   };
 }
 
-export const STRATEGY_TEMPLATES = {
-  momentumPulse: {
-    id: 'momentumPulse',
-    name: 'Momentum Pulse',
-    description: 'Dual-EMA crossover with protective exits when momentum cools.',
-    code: `function strategy({ data, index, price, helpers, state }) {
-  const fast = helpers.ema(data, index, 8);
-  const slow = helpers.ema(data, index, 21);
-
-  if (fast === null || slow === null) {
-    return { action: 'hold' };
-  }
-
-  if (fast > slow && state.positionSize === 0) {
-    return { action: 'buy', note: 'Fast EMA crossed above slow EMA' };
-  }
-
-  const rsi = helpers.rsi(data, index, 14);
-  if (state.positionSize > 0 && (fast < slow || (rsi !== null && rsi > 68))) {
-    return { action: 'exit', note: 'Momentum fading or RSI overbought' };
-  }
-
-  return { action: 'hold' };
-}`
-  },
-  meanRevert: {
-    id: 'meanRevert',
-    name: 'Mean Reversion Bands',
-    description: 'Buy dips below a 20-day average and exit near the median.',
-    code: `function strategy({ data, index, price, helpers, state }) {
-  const basis = helpers.sma(data, index, 20);
-  if (basis === null) {
-    return { action: 'hold' };
-  }
-
-  const lower = basis * 0.985;
-  const upper = basis * 1.015;
-
-  if (price < lower && state.positionSize === 0) {
-    return { action: 'buy', note: 'Price dipped under 1.5% band' };
-  }
-
-  if (state.positionSize > 0 && price >= upper) {
-    return { action: 'sell', note: 'Tagged upper band for exit' };
-  }
-
-  return { action: 'hold' };
-}`
-  },
-  breakout: {
-    id: 'breakout',
-    name: 'High Breakout Ride',
-    description: 'Enter on 30-day highs with trailing exit under swing lows.',
-    code: `function strategy({ data, index, price, helpers, state }) {
-  const recentHigh = helpers.highest(data, index, 30, (bar) => bar.close);
-  const trailingLow = helpers.lowest(data, index, 10, (bar) => bar.low);
-
-  if (recentHigh === null || trailingLow === null) {
-    return { action: 'hold' };
-  }
-
-  if (price >= recentHigh && state.positionSize === 0) {
-    return { action: 'buy', note: 'New 30-day closing high' };
-  }
-
-  if (state.positionSize > 0 && price <= trailingLow) {
-    return { action: 'exit', note: 'Fell beneath 10-day swing low' };
-  }
-
-  return { action: 'hold' };
-}`
-  }
-};
-
-export const DEFAULT_STRATEGY_CODE = STRATEGY_TEMPLATES.momentumPulse.code;
-
-function extractActionLineNumbers(code) {
-  const lines = String(code || '').split('\n');
-  const actions = {
-    buy: [],
-    sell: [],
-    exit: [],
-    short: []
-  };
-
-  lines.forEach((line, index) => {
-    const normalized = line.trim();
-    Object.keys(actions).forEach((action) => {
-      if (
-        normalized.includes(`'${action}'`) ||
-        normalized.includes(`"${action}"`)
-      ) {
-        actions[action].push(index + 1);
-      }
-    });
-  });
-
-  return actions;
-}
-
-export { indicatorHelpers as strategyHelpers, STARTING_CAPITAL };
+export { indicatorHelpers as strategyHelpers };

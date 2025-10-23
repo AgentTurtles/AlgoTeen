@@ -12,91 +12,26 @@ import loadMonaco from '../../lib/monacoLoader';
 
 const templateList = Object.values(STRATEGY_TEMPLATES);
 
-const PARAMETER_FIELDS = [
+const GUIDELINE_CALLOUTS = [
   {
-    key: 'fastLength',
-    label: 'Fast EMA length',
-    description: 'Controls how quickly the strategy reacts to new trends.',
-    min: 4,
-    max: 48,
-    step: 1,
-    defaultValue: 8,
-    type: 'range',
-    suffix: 'bars'
+    title: 'Return structured actions',
+    description:
+      "Strategies must return an object such as { action: 'buy', note } or { action: 'exit' }. Size defaults to 1 unless you set it explicitly."
   },
   {
-    key: 'slowLength',
-    label: 'Slow EMA length',
-    description: 'Long-term trend confirmation to avoid chop.',
-    min: 10,
-    max: 120,
-    step: 1,
-    defaultValue: 21,
-    type: 'range',
-    suffix: 'bars'
+    title: 'Lean on helpers',
+    description:
+      'The engine injects helpers like ema, rsi, highest, and lowest. Call them with (data, index, length) to stay in sync with backtesting.js.'
   },
   {
-    key: 'exitRsi',
-    label: 'RSI exit threshold',
-    description: 'Exit once momentum is overbought and cooling off.',
-    min: 55,
-    max: 90,
-    step: 1,
-    defaultValue: 68,
-    type: 'range'
+    title: 'Use state safely',
+    description:
+      'State exposes positionSize, entryPrice, cash, and equity each bar—read-only. Compute new signals from these values instead of mutating globals.'
   },
   {
-    key: 'stopLoss',
-    label: 'Stop loss (%)',
-    description: 'Capital at risk per trade before forcing an exit.',
-    min: 1,
-    max: 15,
-    step: 0.5,
-    defaultValue: 3,
-    type: 'number',
-    suffix: '%'
-  },
-  {
-    key: 'takeProfit',
-    label: 'Take profit (%)',
-    description: 'Lock gains after a strong move in your favour.',
-    min: 2,
-    max: 30,
-    step: 0.5,
-    defaultValue: 6,
-    type: 'number',
-    suffix: '%'
-  },
-  {
-    key: 'positionSize',
-    label: 'Position size',
-    description: 'Units per order. Switch to risk-based sizing in controls.',
-    min: 1,
-    max: 50,
-    step: 1,
-    defaultValue: 1,
-    type: 'number'
-  }
-];
-
-const PARAMETER_PRESETS = [
-  {
-    id: 'conservative',
-    name: 'Conservative',
-    description: 'Longer trends with tight risk.',
-    values: { fastLength: 12, slowLength: 34, exitRsi: 62, stopLoss: 2.5, takeProfit: 4, positionSize: 1 }
-  },
-  {
-    id: 'balanced',
-    name: 'Balanced',
-    description: 'Default crossover mix for most markets.',
-    values: { fastLength: 8, slowLength: 21, exitRsi: 68, stopLoss: 3, takeProfit: 6, positionSize: 1 }
-  },
-  {
-    id: 'aggro',
-    name: 'Aggro',
-    description: 'Fast reactions, wider targets for volatile assets.',
-    values: { fastLength: 5, slowLength: 13, exitRsi: 72, stopLoss: 4.5, takeProfit: 9, positionSize: 2 }
+    title: 'Keep strategies pure',
+    description:
+      'Avoid network calls or mutable global data. Deterministic logic keeps the backtesting.js engine trustworthy across re-runs.'
   }
 ];
 
@@ -356,75 +291,6 @@ function MetricsHeader({ metrics, previousMetrics }) {
       {metricItems.map((item) => (
         <MetricTile key={item.key} label={item.label} value={item.value} delta={item.delta} />
       ))}
-    </div>
-  );
-}
-
-function ParameterRow({ field, value, onChange }) {
-  const id = `${field.key}-input`;
-  const handleSliderChange = (event) => {
-    const next = Number(event.target.value);
-    onChange(field.key, next);
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <label htmlFor={id} className="block text-sm font-semibold text-emerald-950">
-            {field.label}
-          </label>
-          <p className="mt-1 text-sm text-emerald-900/70">{field.description}</p>
-        </div>
-        <button
-          type="button"
-          title={field.description}
-          className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-200 text-xs font-semibold text-emerald-700"
-          aria-label={`Help for ${field.label}`}
-        >
-          ?
-        </button>
-      </div>
-      {field.type === 'range' ? (
-        <div className="space-y-2">
-          <input
-            id={id}
-            type="range"
-            min={field.min}
-            max={field.max}
-            step={field.step}
-            value={value}
-            onChange={handleSliderChange}
-            className="w-full accent-emerald-600"
-          />
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              min={field.min}
-              max={field.max}
-              step={field.step}
-              value={value}
-              onChange={handleSliderChange}
-              className="w-24 rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            />
-            <span className="text-sm text-emerald-900/70">{field.suffix ?? ''}</span>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center gap-3">
-          <input
-            id={id}
-            type="number"
-            min={field.min}
-            max={field.max}
-            step={field.step}
-            value={value}
-            onChange={handleSliderChange}
-            className="w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-          />
-          <span className="text-sm text-emerald-900/70">{field.suffix ?? ''}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -795,16 +661,6 @@ export default function CodeLabWorkbench() {
 
   const [editorCode, setEditorCode] = useState(DEFAULT_STRATEGY_CODE);
   const [activeTemplate, setActiveTemplate] = useState(templateList[0].id);
-
-  const [parameters, setParameters] = useState(() => {
-    const defaults = {};
-    PARAMETER_FIELDS.forEach((field) => {
-      defaults[field.key] = field.defaultValue;
-    });
-    return defaults;
-  });
-  const [activePreset, setActivePreset] = useState('balanced');
-
   const [assetClass, setAssetClass] = useState('stocks');
   const [symbol, setSymbol] = useState(ASSET_UNIVERSES.stocks.defaultSymbol);
   const [timeframe, setTimeframe] = useState(ASSET_UNIVERSES.stocks.defaultTimeframe);
@@ -821,9 +677,9 @@ export default function CodeLabWorkbench() {
   const [positionSizingMode, setPositionSizingMode] = useState('fixed');
 
   const [marketData, setMarketData] = useState([]);
-  const [marketDataStatus, setMarketDataStatus] = useState('loading');
+  const [marketDataStatus, setMarketDataStatus] = useState('idle');
   const [marketDataError, setMarketDataError] = useState(null);
-  const [marketMetadata, setMarketMetadata] = useState({ symbol: 'SPY', timeframe: '1Day', source: 'ALPACA' });
+  const [marketMetadata, setMarketMetadata] = useState({ symbol: 'SPY', timeframe: '1Day', source: 'POLYGON' });
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
   const [editorBacktestStatus, setEditorBacktestStatus] = useState('idle');
@@ -842,11 +698,32 @@ export default function CodeLabWorkbench() {
 
   const runStartRef = useRef(null);
   const estimatedDurationRef = useRef(5000);
+  const formattedLastSynced = useMemo(() => {
+    if (!lastSyncedAt) {
+      return '—';
+    }
 
-  const parameterSummary = useMemo(
-    () => PARAMETER_FIELDS.map((field) => ({ label: field.label, value: parameters[field.key] })),
-    [parameters]
-  );
+    const minutesAgo = Math.floor((Date.now() - lastSyncedAt.getTime()) / 60000);
+
+    if (minutesAgo <= 0) {
+      return 'just now';
+    }
+
+    if (minutesAgo < 60) {
+      return `${minutesAgo} min ago`;
+    }
+
+    const hoursAgo = Math.floor(minutesAgo / 60);
+
+    if (hoursAgo < 24) {
+      return `${hoursAgo} hr${hoursAgo === 1 ? '' : 's'} ago`;
+    }
+
+    return `${lastSyncedAt.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric'
+    })} ${lastSyncedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  }, [lastSyncedAt]);
 
   const universe = ASSET_UNIVERSES[assetClass];
   const symbols = universe?.symbols ?? [];
@@ -854,30 +731,33 @@ export default function CodeLabWorkbench() {
 
   const activeMetrics = editorBacktestResults?.metrics ?? null;
   const coverage = editorBacktestResults?.coverage ?? null;
-
-  const handleParameterChange = useCallback((key, value) => {
-    setParameters((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const handlePresetApply = (preset) => {
-    setActivePreset(preset.id);
-    setParameters(preset.values);
-  };
-
-  const handleRandomise = () => {
-    setParameters((prev) => {
-      const next = { ...prev };
-      PARAMETER_FIELDS.forEach((field) => {
-        const range = field.max - field.min;
-        const random = field.min + Math.random() * range;
-        const snapped = field.step ? Math.round(random / field.step) * field.step : random;
-        next[field.key] = Number(snapped.toFixed(2));
-      });
-      return next;
-    });
-    setActivePreset(null);
-  };
-
+  const quickSummary = useMemo(() => {
+    if (!activeMetrics) {
+      const dataStatus =
+        marketDataStatus === 'ready'
+          ? `${marketData.length} bars loaded`
+          : marketDataStatus === 'loading'
+            ? 'Loading market data…'
+            : 'No data yet';
+      return [
+        { label: 'Status', value: 'Awaiting first run' },
+        { label: 'Data', value: dataStatus },
+        { label: 'Engine', value: 'backtesting.js' }
+      ];
+    }
+    return [
+      { label: 'Total return', value: formatPercent(activeMetrics.totalReturn) },
+      { label: 'Max drawdown', value: formatPercent(activeMetrics.maxDrawdown) },
+      {
+        label: 'Sharpe',
+        value: Number.isFinite(activeMetrics.sharpe) ? activeMetrics.sharpe.toFixed(2) : '—'
+      },
+      {
+        label: 'Win rate',
+        value: formatPercent(activeMetrics.winRate)
+      }
+    ];
+  }, [activeMetrics, marketData.length, marketDataStatus]);
   const setQuickRange = (rangeId) => {
     const quick = QUICK_RANGES.find((item) => item.id === rangeId);
     if (!quick) {
@@ -897,7 +777,7 @@ export default function CodeLabWorkbench() {
     }));
   };
 
-  const loadBrokerageData = useCallback(async () => {
+  const loadMarketData = useCallback(async () => {
     setMarketDataStatus('loading');
     setMarketDataError(null);
 
@@ -955,7 +835,7 @@ export default function CodeLabWorkbench() {
       setMarketMetadata({
         symbol: payload?.symbol ?? symbol,
         timeframe: payload?.timeframe ?? timeframe,
-        source: payload?.source ?? 'ALPACA'
+        source: payload?.source ?? 'POLYGON'
       });
       setLastSyncedAt(new Date());
       setMarketDataStatus('ready');
@@ -963,7 +843,7 @@ export default function CodeLabWorkbench() {
       setMarketDataStatus('error');
       setMarketDataError(error.message);
     }
-  }, [assetClass, symbol, timeframe]);
+  }, [assetClass, backtestRange, symbol, timeframe]);
 
   // Remove automatic fetch; only fetch when user clicks 'Load market data'.
 
@@ -1114,7 +994,9 @@ export default function CodeLabWorkbench() {
       setEtaMs(Math.max(0, estimate - elapsed));
     }, 200);
 
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearInterval(interval);
+    };
   }, [editorBacktestStatus]);
 
   useEffect(() => {
@@ -1238,7 +1120,7 @@ export default function CodeLabWorkbench() {
         editorRef.current = null;
       }
     };
-  }, [editorCode]);
+  }, []);
 
   useEffect(() => {
     if (monacoStatus !== 'ready' || !editorRef.current || !monacoRef.current) {
@@ -1322,7 +1204,6 @@ export default function CodeLabWorkbench() {
   const handleTemplateSelect = (template) => {
     setActiveTemplate(template.id);
     setEditorCode(template.code);
-    setActivePreset(null);
     if (editorRef.current) {
       editorRef.current.setValue(template.code);
       editorRef.current.focus();
@@ -1331,431 +1212,409 @@ export default function CodeLabWorkbench() {
 
   const resetCodeToPreset = () => {
     const template = STRATEGY_TEMPLATES[activeTemplate] ?? templateList[0];
-    setEditorCode(template.code);
+    const nextCode = template?.code ?? DEFAULT_STRATEGY_CODE;
+    setEditorCode(nextCode);
     if (editorRef.current) {
-      editorRef.current.setValue(template.code);
+      editorRef.current.setValue(nextCode);
       editorRef.current.focus();
     }
   };
 
-  const formattedLastSynced = lastSyncedAt
-    ? new Intl.DateTimeFormat('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        month: 'short',
-        day: 'numeric'
-      }).format(lastSyncedAt)
-    : 'Never';
-
   return (
-  <div className="w-screen min-h-screen bg-emerald-50 flex flex-col items-center justify-start gap-6 py-8 overflow-x-hidden">
+    <div className="space-y-10">
       {loadError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-1 py-3 text-sm text-rose-700">{loadError}</div>
+        <div className="mx-auto w-full max-w-[min(96vw,600px)] rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {loadError}
+        </div>
       ) : null}
 
-  <div className="rounded-3xl border border-emerald-100 bg-white/95 shadow-[0_30px_80px_rgba(12,38,26,0.12)] max-w-7xl w-full px-4 sm:px-6 lg:px-8 ms-auto justify-center">
-        <div className="sticky top-0 z-10 flex flex-col gap-4 border-b border-emerald-100 bg-white/95 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">AlgoTeen Code Desk</p>
-            <div className="flex items-center gap-2 text-sm text-emerald-900/70">
-              <span>{marketMetadata.symbol}</span>
-              <span aria-hidden="true">•</span>
-              <span>{marketMetadata.timeframe}</span>
-              <span aria-hidden="true">•</span>
-              <span>Last sync {formattedLastSynced}</span>
+      <div className="mx-auto w-full max-w-[min(96vw,1280px)] space-y-10 px-4 sm:px-6 lg:px-8">
+        <section className="rounded-3xl border border-emerald-100 bg-white/95 shadow-[0_30px_80px_rgba(12,38,26,0.12)]">
+          <header className="flex flex-col gap-6 border-b border-emerald-100 bg-white/95 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">AlgoTeen Code Desk</p>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-900/70">
+                <span>{marketMetadata.symbol}</span>
+                <span aria-hidden="true">•</span>
+                <span>{marketMetadata.timeframe}</span>
+                <span aria-hidden="true">•</span>
+                <span>Last sync {formattedLastSynced}</span>
+              </div>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={resetCodeToPreset}
-              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-            >
-              Reset to template
-            </button>
-            <button
-              type="button"
-              onClick={runEditorStrategy}
-              className={cx(
-                'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
-                editorBacktestStatus === 'running'
-                  ? 'bg-emerald-400 hover:bg-emerald-500'
-                  : 'bg-emerald-600 hover:bg-emerald-700'
-              )}
-              disabled={editorBacktestStatus === 'running'}
-            >
-              {editorBacktestStatus === 'running' ? (
-                <>
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-r-transparent" aria-hidden="true" />
-                  Running…
-                </>
-              ) : (
-                'Run backtest'
-              )}
-            </button>
-          </div>
-        </div>
-
-  <div className="grid gap-12 py-6 w-full mx-auto items-start xl:grid-cols-[2fr_1fr]">
-          <div className="space-y-6 w-full flex-1">
-            <div className="flex flex-wrap gap-2">
-              {templateList.map((template) => (
-                <button
-                  key={template.id}
-                  type="button"
-                  onClick={() => handleTemplateSelect(template)}
-                  className={cx(
-                    'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
-                    activeTemplate === template.id
-                      ? 'border-emerald-500 bg-emerald-600 text-white'
-                      : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
-                  )}
-                >
-                  {template.name}
-                </button>
-              ))}
-            </div>
-            <div className="rounded-xl border border-emerald-100 bg-[#04140c] p-4 flex justify-center mx-auto w-full">
-              <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-emerald-900/30 min-h-[360px] sm:min-h-[520px] md:min-h-[640px]">
-                {monacoStatus === 'ready' ? null : (
-                  <textarea
-                    value={editorCode}
-                    onChange={(event) => setEditorCode(event.target.value)}
-                    className="h-full w-full resize-none bg-[#04140c] p-4 font-mono text-[14px] text-emerald-100 focus:outline-none"
-                  />
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={resetCodeToPreset}
+                className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+              >
+                Reset to template
+              </button>
+              <button
+                type="button"
+                onClick={runEditorStrategy}
+                className={cx(
+                  'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
+                  editorBacktestStatus === 'running'
+                    ? 'bg-emerald-400 hover:bg-emerald-500'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
                 )}
-              </div>
+                disabled={editorBacktestStatus === 'running'}
+              >
+                {editorBacktestStatus === 'running' ? (
+                  <>
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-r-transparent" aria-hidden="true" />
+                    Running…
+                  </>
+                ) : (
+                  'Run backtest'
+                )}
+              </button>
             </div>
+          </header>
 
-            <div className="rounded-xl border border-emerald-100 bg-white px-4 py-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Progress</p>
-                  <p className="text-sm text-emerald-900/70">{editorBacktestStatus === 'running' ? 'Crunching trades…' : 'Ready'}</p>
-                </div>
-                <div className="text-right text-sm text-emerald-900/70">
-                  <p>ETA {formatDuration(etaMs)}</p>
-                  <p>{editorProgress.toFixed(0)}%</p>
-                </div>
-              </div>
-              <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-emerald-100">
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-all"
-                  style={{ width: `${editorProgress}%` }}
-                />
-              </div>
-              {editorError ? (
-                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{editorError}</p>
-              ) : null}
-            </div>
-
-            <MetricsHeader metrics={activeMetrics} previousMetrics={previousMetrics} />
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <EquityPreview equityCurve={editorBacktestResults?.equityCurve} />
-              <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Trade digest</p>
-                <p className="text-base text-emerald-900/70">Recent trades sorted by execution order.</p>
-                <div className="mt-4">
-                  <TradesDigest trades={editorBacktestResults?.trades} />
-                </div>
-              </div>
-            </div>
-
-            <ConsolePane
-              runs={runHistory}
-              activeRunId={activeRunId}
-              onSelectRun={setActiveRunId}
-              filter={consoleFilter}
-              onFilterChange={setConsoleFilter}
-            />
+          <div className="border-b border-emerald-100 bg-emerald-50/60 px-6 py-4">
+            <ol className="flex flex-wrap items-center gap-4 text-sm text-emerald-900/80">
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-emerald-700">1</span>
+                <span>Load Polygon bars</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-emerald-700">2</span>
+                <span>Tune strategy inputs</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-semibold text-emerald-700">3</span>
+                <span>Review metrics & iterate</span>
+              </li>
+            </ol>
           </div>
 
-          <div id="strategy">
-            <ScrollShadowContainer className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-              <div className="space-y-6">
-              <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Parameters</p>
-                    <p className="text-base text-emerald-900/70">Start from a preset or tune each field. Changes apply instantly.</p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {PARAMETER_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => handlePresetApply(preset)}
-                        className={cx(
-                          'rounded-lg border px-3 py-2 text-left text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
-                          activePreset === preset.id
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-900'
-                            : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
-                        )}
-                      >
-                        <span className="block font-semibold">{preset.name}</span>
-                        <span className="block text-xs text-emerald-900/70">{preset.description}</span>
-                      </button>
-                    ))}
-                  </div>
+          <div className="grid gap-10 px-8 py-10 xl:grid-cols-[minmax(0,2.2fr)_minmax(320px,0.9fr)] 2xl:px-12">
+            <div className="space-y-6">
+              <div className="flex flex-wrap gap-2">
+                {templateList.map((template) => (
                   <button
+                    key={template.id}
                     type="button"
-                    onClick={handleRandomise}
-                    className="self-start rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                    onClick={() => handleTemplateSelect(template)}
+                    className={cx(
+                      'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
+                      activeTemplate === template.id
+                        ? 'border-emerald-500 bg-emerald-600 text-white'
+                        : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
+                    )}
                   >
-                    Randomize within bounds
+                    {template.name}
                   </button>
-                </div>
-                <div className="mt-4 space-y-4">
-                  {PARAMETER_FIELDS.map((field) => (
-                    <ParameterRow
-                      key={field.key}
-                      field={field}
-                      value={parameters[field.key]}
-                      onChange={handleParameterChange}
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-emerald-100 bg-[#04140c] p-4">
+                <div ref={containerRef} className="w-full overflow-hidden rounded-lg border border-emerald-900/30 min-h-[360px] sm:min-h-[520px] md:min-h-[640px]">
+                  {monacoStatus === 'ready' ? null : (
+                    <textarea
+                      value={editorCode}
+                      onChange={(event) => setEditorCode(event.target.value)}
+                      className="h-full w-full resize-none bg-[#04140c] p-4 font-mono text-[14px] text-emerald-100 focus:outline-none"
                     />
-                  ))}
+                  )}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Backtest controls</p>
-                <p className="text-base text-emerald-900/70">Choose the dataset, trading window, and execution assumptions.</p>
-                {/* Market Data Summary for Polygon.io */}
-                {marketDataStatus === 'ready' && marketData.length > 0 && (
-                  <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-xs text-emerald-900">
-                    <div className="flex flex-wrap gap-2 items-center">
-                      <span className="font-semibold">Loaded:</span>
-                      <span>{marketData.length} bars</span>
-                      <span>|</span>
-                      <span>Date range:</span>
-                      <span>{marketData[0].date} → {marketData[marketData.length-1].date}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2 items-center mt-1">
-                      <span>Open:</span>
-                      <span>min {Math.min(...marketData.map(b => b.open)).toFixed(2)}</span>
-                      <span>max {Math.max(...marketData.map(b => b.open)).toFixed(2)}</span>
-                      <span>| Close:</span>
-                      <span>min {Math.min(...marketData.map(b => b.close)).toFixed(2)}</span>
-                      <span>max {Math.max(...marketData.map(b => b.close)).toFixed(2)}</span>
-                      <span>| Vol:</span>
-                      <span>avg {Math.round(marketData.reduce((a,b)=>a+b.volume,0)/marketData.length)}</span>
-                    </div>
-                    <div className="mt-2">
-                      <span className="font-semibold">Sample:</span>
-                      <pre className="mt-1 rounded bg-emerald-100/60 p-2 text-[11px] text-emerald-900 overflow-x-auto">
-                        {JSON.stringify(marketData.slice(0,3), null, 2)}
-                      </pre>
-                    </div>
+              <div className="rounded-xl border border-emerald-100 bg-white px-4 py-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Progress</p>
+                    <p className="text-sm text-emerald-900/70">{editorBacktestStatus === 'running' ? 'Crunching trades…' : 'Ready'}</p>
                   </div>
-                )}
-                <div className="mt-4 space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Date range</p>
-                    <div className="flex flex-wrap gap-2">
-                      {QUICK_RANGES.map((range) => (
-                        <button
-                          key={range.id}
-                          type="button"
-                          onClick={() => setQuickRange(range.id)}
-                          className={cx(
-                            'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition',
-                            backtestRange.quickRange === range.id
-                              ? 'border-emerald-500 bg-emerald-600 text-white'
-                              : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
-                          )}
+                  <div className="text-right text-sm text-emerald-900/70">
+                    <p>ETA {formatDuration(etaMs)}</p>
+                    <p>{editorProgress.toFixed(0)}%</p>
+                  </div>
+                </div>
+                <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-emerald-100">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all"
+                    style={{ width: `${editorProgress}%` }}
+                  />
+                </div>
+                {editorError ? (
+                  <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{editorError}</p>
+                ) : null}
+              </div>
+
+              <MetricsHeader metrics={activeMetrics} previousMetrics={previousMetrics} />
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <EquityPreview equityCurve={editorBacktestResults?.equityCurve} />
+                <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Trade digest</p>
+                  <p className="text-base text-emerald-900/70">Recent trades sorted by execution order.</p>
+                  <div className="mt-4">
+                    <TradesDigest trades={editorBacktestResults?.trades} />
+                  </div>
+                </div>
+              </div>
+
+              <ConsolePane
+                runs={runHistory}
+                activeRunId={activeRunId}
+                onSelectRun={setActiveRunId}
+                filter={consoleFilter}
+                onFilterChange={setConsoleFilter}
+              />
+            </div>
+
+            <div id="strategy" className="space-y-6">
+              <ScrollShadowContainer className="rounded-xl border border-emerald-100 bg-emerald-50/40">
+                <div className="space-y-6 px-5 py-6">
+                  <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Backtesting.js essentials</p>
+                      <p className="text-base text-emerald-900/70">
+                        Every strategy runs inside the backtesting.js engine. Follow these guardrails before you hit run.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      {GUIDELINE_CALLOUTS.map((callout) => (
+                        <div
+                          key={callout.title}
+                          className="rounded-xl border border-emerald-100 bg-white/90 p-4 shadow-sm"
                         >
-                          {range.label}
-                        </button>
+                          <h3 className="text-sm font-semibold text-emerald-950">{callout.title}</h3>
+                          <p className="mt-1 text-sm text-emerald-900/70">{callout.description}</p>
+                        </div>
                       ))}
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Start</span>
-                        <input
-                          type="date"
-                          value={formatDateInput(backtestRange.startDate)}
-                          onChange={(event) => handleRangeChange('startDate', event.target.value)}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">End</span>
-                        <input
-                          type="date"
-                          value={formatDateInput(backtestRange.endDate)}
-                          onChange={(event) => handleRangeChange('endDate', event.target.value)}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                    </div>
+                  </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Universe</p>
-                    <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Asset class</span>
-                      <select
-                        value={assetClass}
-                        onChange={(event) => {
-                          const next = event.target.value;
-                          const config = ASSET_UNIVERSES[next];
-                          setAssetClass(next);
-                          setSymbol(config.defaultSymbol);
-                          setTimeframe(config.defaultTimeframe);
-                        }}
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                      >
-                        {Object.entries(ASSET_UNIVERSES).map(([key, value]) => (
-                          <option key={key} value={key}>
-                            {value.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Symbol</span>
-                      <select
-                        value={symbol}
-                        onChange={(event) => setSymbol(event.target.value)}
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                      >
-                        {symbols.map((option) => (
-                          <option key={option.symbol} value={option.symbol}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                      <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Timeframe</span>
-                      <select
-                        value={timeframe}
-                        onChange={(event) => setTimeframe(event.target.value)}
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                      >
-                        {timeframes.map((frame) => (
-                          <option key={frame} value={frame}>
-                            {frame}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={loadBrokerageData}
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                      >
-                        Load market data
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-900 transition hover:border-emerald-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                        onClick={() => navigator.clipboard?.writeText(JSON.stringify({ parameters, backtestRange }, null, 2))}
-                      >
-                        Copy config
-                      </button>
-                    </div>
-                    {marketDataStatus === 'error' ? (
-                      <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{marketDataError}</p>
+                  <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Backtest controls</p>
+                    <p className="text-base text-emerald-900/70">Choose the dataset, trading window, and execution assumptions.</p>
+                    {marketDataStatus === 'ready' && marketData.length > 0 ? (
+                      <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-900">
+                        <p className="font-semibold">Loaded {marketData.length} bars via {(marketMetadata.source ?? 'Polygon').toString().toUpperCase()}.</p>
+                        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-emerald-800/80">
+                          {marketData[0].date} → {marketData[marketData.length - 1].date}
+                        </p>
+                      </div>
                     ) : null}
-                  </div>
+                    <div className="mt-4 space-y-4">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Date range</p>
+                        <div className="flex flex-wrap gap-2">
+                          {QUICK_RANGES.map((range) => (
+                            <button
+                              key={range.id}
+                              type="button"
+                              onClick={() => setQuickRange(range.id)}
+                              className={cx(
+                                'rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition',
+                                backtestRange.quickRange === range.id
+                                  ? 'border-emerald-500 bg-emerald-600 text-white'
+                                  : 'border-emerald-200 bg-white text-emerald-900 hover:border-emerald-400'
+                              )}
+                            >
+                              {range.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Start</span>
+                            <input
+                              type="date"
+                              value={formatDateInput(backtestRange.startDate)}
+                              onChange={(event) => handleRangeChange('startDate', event.target.value)}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">End</span>
+                            <input
+                              type="date"
+                              value={formatDateInput(backtestRange.endDate)}
+                              onChange={(event) => handleRangeChange('endDate', event.target.value)}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                        </div>
+                      </div>
 
-                  <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Fees / slippage (bps)</span>
-                        <input
-                          type="number"
-                          value={slippageBps}
-                          onChange={(event) => setSlippageBps(Number(event.target.value))}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                      <label className="flex items-center gap-2 text-sm text-emerald-900">
-                        <input
-                          type="checkbox"
-                          checked={useExchangeFees}
-                          onChange={(event) => setUseExchangeFees(event.target.checked)}
-                          className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        Use exchange defaults
-                      </label>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Starting capital</span>
-                        <input
-                          type="number"
-                          value={startingCapital}
-                          onChange={(event) => setStartingCapital(Number(event.target.value))}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1 text-sm text-emerald-900">
-                        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Max concurrent positions</span>
-                        <input
-                          type="number"
-                          value={maxPositions}
-                          onChange={(event) => setMaxPositions(Number(event.target.value))}
-                          className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                        />
-                      </label>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Sizing</p>
-                      <div className="mt-2 inline-flex rounded-full border border-emerald-200 bg-white p-1">
-                        {['fixed', 'risk-based'].map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            onClick={() => setPositionSizingMode(mode)}
-                            className={cx(
-                              'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] transition',
-                              positionSizingMode === mode
-                                ? 'bg-emerald-600 text-white'
-                                : 'text-emerald-900'
-                            )}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Universe</p>
+                        <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Asset class</span>
+                          <select
+                            value={assetClass}
+                            onChange={(event) => {
+                              const next = event.target.value;
+                              const config = ASSET_UNIVERSES[next];
+                              setAssetClass(next);
+                              setSymbol(config.defaultSymbol);
+                              setTimeframe(config.defaultTimeframe);
+                            }}
+                            className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
                           >
-                            {mode === 'fixed' ? 'Fixed' : 'Risk'}
+                            {Object.entries(ASSET_UNIVERSES).map(([key, value]) => (
+                              <option key={key} value={key}>
+                                {value.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Symbol</span>
+                          <select
+                            value={symbol}
+                            onChange={(event) => setSymbol(event.target.value)}
+                            className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                          >
+                            {symbols.map((option) => (
+                              <option key={option.symbol} value={option.symbol}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Timeframe</span>
+                          <select
+                            value={timeframe}
+                            onChange={(event) => setTimeframe(event.target.value)}
+                            className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                          >
+                            {timeframes.map((frame) => (
+                              <option key={frame} value={frame}>
+                                {frame}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Data</p>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={loadMarketData}
+                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                            disabled={marketDataStatus === 'loading'}
+                          >
+                            {marketDataStatus === 'loading' ? (
+                              <>
+                                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-r-transparent" aria-hidden="true" />
+                                Loading…
+                              </>
+                            ) : (
+                              'Load market data'
+                            )}
                           </button>
-                        ))}
+                          <span className="text-xs text-emerald-900/70">Polygon.io data with smart defaults.</span>
+                        </div>
+                        {marketDataStatus === 'error' ? (
+                          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{marketDataError}</p>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Fees / slippage (bps)</span>
+                            <input
+                              type="number"
+                              value={slippageBps}
+                              onChange={(event) => setSlippageBps(Number(event.target.value))}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-emerald-900">
+                            <input
+                              type="checkbox"
+                              checked={useExchangeFees}
+                              onChange={(event) => setUseExchangeFees(event.target.checked)}
+                              className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            Use exchange defaults
+                          </label>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Starting capital</span>
+                            <input
+                              type="number"
+                              value={startingCapital}
+                              onChange={(event) => setStartingCapital(Number(event.target.value))}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1 text-sm text-emerald-900">
+                            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Max concurrent positions</span>
+                            <input
+                              type="number"
+                              value={maxPositions}
+                              onChange={(event) => setMaxPositions(Number(event.target.value))}
+                              className="rounded-lg border border-emerald-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                            />
+                          </label>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-900/70">Sizing</p>
+                          <div className="mt-2 inline-flex rounded-full border border-emerald-200 bg-white p-1">
+                            {['fixed', 'risk-based'].map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setPositionSizingMode(mode)}
+                                className={cx(
+                                  'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] transition',
+                                  positionSizingMode === mode
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'text-emerald-900'
+                                )}
+                              >
+                                {mode === 'fixed' ? 'Fixed' : 'Risk'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
+
+                  <UnitTestsPanel results={editorBacktestResults} onRunTests={runUnitTests} running={testsRunning} />
+
+                  <SignalCoveragePanel coverage={coverage} onHighlight={highlightCoverage} />
+
+                  <DocsDrawer query={docsQuery} onQueryChange={setDocsQuery} />
                 </div>
-              </div>
-
-              <UnitTestsPanel results={editorBacktestResults} onRunTests={runUnitTests} running={testsRunning} />
-
-              <SignalCoveragePanel coverage={coverage} onHighlight={highlightCoverage} />
-
-              <DocsDrawer query={docsQuery} onQueryChange={setDocsQuery} />
+              </ScrollShadowContainer>
             </div>
-            </ScrollShadowContainer>
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div className="rounded-3xl border border-emerald-100 bg-white/95 p-6 shadow-[0_30px_80px_rgba(12,38,26,0.12)]">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">Quick summary</p>
-            <h2 className="text-3xl font-semibold text-emerald-950">Session checklist</h2>
-            <p className="mt-2 text-base text-emerald-900/70">
-              Before running again: confirm presets, review coverage, and skim the log for warnings.
-            </p>
+        <section className="rounded-3xl border border-emerald-100 bg-white/95 p-6 shadow-[0_30px_80px_rgba(12,38,26,0.12)]">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-900/70">Quick summary</p>
+              <h2 className="text-3xl font-semibold text-emerald-950">Session checklist</h2>
+              <p className="mt-2 text-base text-emerald-900/70">
+                Before running again: confirm presets, review coverage, and skim the log for warnings.
+              </p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
+              {quickSummary.map((item) => (
+                <div key={item.label} className="flex items-center justify-between">
+                  <span>{item.label}</span>
+                  <span className="font-semibold">{item.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
-            {parameterSummary.map((item) => (
-              <div key={item.label} className="flex items-center justify-between">
-                <span>{item.label}</span>
-                <span className="font-semibold">{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   );

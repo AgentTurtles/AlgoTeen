@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { ORDER_TYPES, REALISM_LEVELS } from './data';
+import { ORDER_TYPES } from './data';
 import { formatCurrency, roundTo } from './utils';
 
 function ToggleGroup({ label, value, onChange, options }) {
@@ -15,9 +15,9 @@ function ToggleGroup({ label, value, onChange, options }) {
               key={option.id}
               type="button"
               onClick={() => onChange(option.id)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
                 isActive
-                  ? 'border-blue-700 bg-blue-700 text-white'
+                  ? 'border-emerald-600 bg-emerald-600 text-white'
                   : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
               }`}
             >
@@ -118,7 +118,7 @@ function QuantityControls({
             step={0.01}
             value={quantity}
             onChange={(event) => onQuantityChange(Number.parseFloat(event.target.value), 'shares')}
-            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           />
         </div>
         <div>
@@ -132,7 +132,7 @@ function QuantityControls({
             step={0.01}
             value={lots}
             onChange={(event) => onQuantityChange(Number.parseFloat(event.target.value), 'lots')}
-            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           />
         </div>
       </div>
@@ -149,9 +149,7 @@ export default function OrderTicket({
   account,
   bestPrice,
   reference,
-  lotSize,
-  realismConfig,
-  baselineRealism = REALISM_LEVELS[0]
+  lotSize
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -167,14 +165,8 @@ export default function OrderTicket({
   const maxLots = Math.max(0.01, maxShares / lotSize);
 
   const basePrice = draft.type === 'market' ? bestPrice : draft.limitPrice ?? bestPrice;
-  const direction = draft.side === 'buy' ? 1 : -1;
-  const slip = (realismConfig.slippageBps / 10000) * basePrice;
-  const fillPriceEstimate = roundTo(basePrice + direction * slip, 2);
-  const baselineSlip = (baselineRealism.slippageBps / 10000) * basePrice;
-  const baselineFill = roundTo(basePrice + direction * baselineSlip, 2);
+  const fillPriceEstimate = roundTo(basePrice, 2);
   const estimatedCost = roundTo(fillPriceEstimate * effectiveQuantity, 2);
-  const baselineCost = roundTo(baselineFill * effectiveQuantity, 2);
-  const costDelta = roundTo(estimatedCost - baselineCost, 2);
   const estimatedFees = roundTo(estimatedCost * 0.0005, 2);
   const costWithFees = estimatedCost + estimatedFees;
   const buyingPowerLeft = roundTo(account.buyingPower - costWithFees, 2);
@@ -205,12 +197,6 @@ export default function OrderTicket({
       }
       if (draft.side === 'sell' && draft.targetPrice >= entryCheck) {
         return 'Targets for sells should sit below entry.';
-      }
-    }
-    if (draft.side === 'sell') {
-      const hasPosition = data.positions.some((pos) => pos.symbol === data.symbol);
-      if (!hasPosition) {
-        return 'You need an open position to sell. Shorting is disabled in this simulator.';
       }
     }
     if (costWithFees > account.buyingPower) {
@@ -334,7 +320,7 @@ export default function OrderTicket({
                 id="limitPrice"
                 type="number"
                 step="0.01"
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                 value={draft.limitPrice ?? ''}
                 onChange={handleNumericFieldChange('limitPrice')}
               />
@@ -352,7 +338,7 @@ export default function OrderTicket({
                   id="stopTrigger"
                   type="number"
                   step="0.01"
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   value={draft.stopTrigger ?? ''}
                   onChange={handleNumericFieldChange('stopTrigger')}
                 />
@@ -366,7 +352,7 @@ export default function OrderTicket({
                   id="stopLimit"
                   type="number"
                   step="0.01"
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   value={draft.stopLimit ?? ''}
                   onChange={handleNumericFieldChange('stopLimit')}
                 />
@@ -384,7 +370,7 @@ export default function OrderTicket({
                 id="stopPrice"
                 type="number"
                 step="0.01"
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                 value={draft.stopPrice ?? ''}
                 onChange={handleNumericFieldChange('stopPrice')}
                 placeholder="Prefill from chart"
@@ -399,7 +385,7 @@ export default function OrderTicket({
                 id="targetPrice"
                 type="number"
                 step="0.01"
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                 value={draft.targetPrice ?? ''}
                 onChange={handleNumericFieldChange('targetPrice')}
                 placeholder="Prefill from chart"
@@ -415,11 +401,6 @@ export default function OrderTicket({
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Est. cost (fees in)</p>
             <p className="mt-1 font-semibold text-slate-900">{formatCurrency(costWithFees)}</p>
-            {costDelta !== 0 ? (
-              <p className="text-xs text-slate-500">
-                {costDelta > 0 ? '+' : '-'}{formatCurrency(Math.abs(costDelta))} vs {baselineRealism.name}
-              </p>
-            ) : null}
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Buying power left</p>
@@ -440,7 +421,7 @@ export default function OrderTicket({
           )}
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          Simulated execution may differ. We respect daily loss limits and disable trades when your risk exceeds the configured guardrail.
+          Orders route directly to Alpaca&apos;s paper trading API. Live market data and your guardrails determine fill speed and outcomes.
         </p>
       </div>
 
@@ -448,7 +429,7 @@ export default function OrderTicket({
         <button
           type="button"
           onClick={() => setShowAdvanced((prev) => !prev)}
-          className="text-sm font-medium text-blue-700"
+          className="text-sm font-medium text-emerald-700"
         >
           {showAdvanced ? 'Hide advanced' : 'More options'}
         </button>
@@ -462,7 +443,7 @@ export default function OrderTicket({
                 id="timeInForce"
                 value={draft.timeInForce}
                 onChange={(event) => handleFieldChange('timeInForce', event.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
               >
                 <option value="day">Day</option>
                 <option value="gtc">Good till cancel</option>
@@ -476,7 +457,7 @@ export default function OrderTicket({
                   type="checkbox"
                   checked={draft.bracket}
                   onChange={(event) => handleFieldChange('bracket', event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-700"
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
                 />
                 Bracket with attached stop + target
               </label>
@@ -489,7 +470,7 @@ export default function OrderTicket({
                   type="checkbox"
                   checked={draft.oco}
                   onChange={(event) => handleFieldChange('oco', event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-700"
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
                 />
                 Enable OCO pair
               </label>
@@ -502,7 +483,7 @@ export default function OrderTicket({
                   type="checkbox"
                   checked={draft.reduceOnly}
                   onChange={(event) => handleFieldChange('reduceOnly', event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-700"
+                  className="h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
                 />
                 Reduce existing position only
               </label>
@@ -538,7 +519,7 @@ export default function OrderTicket({
           className={`flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-base font-semibold text-white shadow transition ${
             disabled || invalidReason
               ? 'cursor-not-allowed bg-slate-400'
-              : 'bg-blue-700 hover:bg-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500'
+              : 'bg-emerald-600 hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500'
           }`}
         >
           <span>{disabled ? 'Simulating…' : 'Place order'}</span>

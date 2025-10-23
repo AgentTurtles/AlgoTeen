@@ -1,5 +1,9 @@
 export function roundTo(value, decimals = 2) {
-  return Number.parseFloat(value.toFixed(decimals));
+  const numeric = Number.parseFloat(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return Number.parseFloat(numeric.toFixed(decimals));
 }
 
 export function formatCurrency(value, currency = 'USD') {

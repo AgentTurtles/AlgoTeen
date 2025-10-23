@@ -9,9 +9,9 @@ function ChartOverlayToggle({ label, active, onToggle, hotkey }) {
     <button
       type="button"
       onClick={onToggle}
-      className={`rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
+      className={`rounded-full border px-3 py-1 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
         active
-          ? 'border-blue-700 bg-blue-700 text-white shadow-sm'
+          ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
       }`}
     >
@@ -333,10 +333,15 @@ export default function TradeChart({
     }
 
     filledOrders
-      .filter((order) => order.index >= visibleStartIndex && order.index <= visibleEndIndex)
+      .filter((order) => order.price != null && Number.isFinite(order.price))
       .forEach((order) => {
+        const resolvedIndex =
+          order.index != null && Number.isFinite(order.index) ? order.index : visibleEndIndex;
+        if (resolvedIndex < visibleStartIndex || resolvedIndex > visibleEndIndex) {
+          return;
+        }
         const orderY = scaleYPrice(order.price);
-        const orderX = scaleXIndex(order.index);
+        const orderX = scaleXIndex(resolvedIndex);
         ctx.fillStyle = order.side === 'buy' ? '#2563EB' : '#DC2626';
         ctx.beginPath();
         ctx.arc(orderX, orderY, 6, 0, Math.PI * 2);
@@ -537,7 +542,7 @@ export default function TradeChart({
                   key={option.id}
                   type="button"
                   onClick={() => onTimeframeChange(option.id)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 ${
                     isActive
                       ? 'bg-slate-900 text-white'
                       : 'text-slate-600 hover:text-slate-900'
@@ -555,7 +560,7 @@ export default function TradeChart({
             type="button"
             onClick={handleResetOverlays}
             aria-label="Reset overlays"
-            className="rounded-full border border-slate-200 p-2 text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+            className="rounded-full border border-slate-200 p-2 text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="1 4 1 10 7 10" />

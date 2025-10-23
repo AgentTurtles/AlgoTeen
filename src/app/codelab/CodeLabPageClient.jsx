@@ -224,7 +224,7 @@ export default function CodeLabPageClient() {
           </section>
 
           <section id="editor" className="bg-[var(--surface-base)] py-24">
-            <div className="mx-auto max-w-6xl px-4">
+            <div className="mx-auto w-full max-w-[min(96vw,1280px)] px-4 sm:px-6 lg:px-8">
               <div className="mx-auto max-w-2xl text-center">
                 <span className="font-bricolage text-sm font-semibold uppercase tracking-[0.32em] text-emerald-700/80">
                   Trading desk
@@ -245,7 +245,7 @@ export default function CodeLabPageClient() {
           </section>
 
           <section id="paper" className="bg-white py-20">
-            <div className="mx-auto max-w-5xl px-4">
+            <div className="mx-auto w-full max-w-[min(94vw,1100px)] px-4 sm:px-6 lg:px-8">
               <div className="rounded-3xl border border-emerald-900/15 bg-white/95 p-8 shadow-[0_28px_70px_rgba(12,38,26,0.16)]">
                 <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
                   <div className="space-y-4">

@@ -23,7 +23,11 @@ export default function RightRail({
   ];
 
   return (
-    <aside ref={reference} className="relative flex h-full w-[360px] flex-col border-l border-slate-200 bg-white">
+    <aside
+      ref={reference}
+      id="paper-rail"
+      className="relative flex h-full w-[360px] flex-col border-l border-slate-200 bg-white"
+    >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-slate-200/70 to-transparent" aria-hidden />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3 bg-gradient-to-t from-slate-200/70 to-transparent" aria-hidden />
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 pb-4 pt-4">
@@ -44,7 +48,7 @@ export default function RightRail({
           <select
             value={riskSettings.dailyLossLimit}
             onChange={(event) => onRiskChange({ ...riskSettings, dailyLossLimit: event.target.value })}
-            className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+            className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           >
             {DAILY_LOSS_LIMITS.map((limit) => (
               <option key={limit.id} value={limit.id}>
@@ -151,18 +155,47 @@ export default function RightRail({
                 No orders yet. Your tickets will show here with status and fills.
               </div>
             ) : (
-              orders.map((order) => (
-                <div key={order.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{order.side.toUpperCase()} {order.quantity} {order.symbol}</p>
-                      <p className="text-xs text-slate-500">{order.type} · {order.status}</p>
+              orders.map((order) => {
+                const status = (order.status ?? '').replace(/_/g, ' ');
+                const filledSummary = order.filledQuantity
+                  ? `${order.filledQuantity}/${order.quantity}`
+                  : order.quantity;
+                const displayPrice =
+                  order.filledAvgPrice != null
+                    ? formatCurrency(order.filledAvgPrice)
+                    : order.limitPrice != null
+                      ? formatCurrency(order.limitPrice)
+                      : order.stopPrice != null
+                        ? formatCurrency(order.stopPrice)
+                        : '--';
+                const submitted = order.submittedAt ? new Date(order.submittedAt).toLocaleString() : null;
+                return (
+                  <div key={order.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {order.side?.toUpperCase()} {filledSummary} {order.symbol}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {order.type?.toUpperCase()} · {status}
+                          {order.orderClass ? ` · ${order.orderClass}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-right text-sm font-semibold text-slate-900">{displayPrice}</div>
                     </div>
-                    <div className="text-right text-sm font-semibold text-slate-900">{formatCurrency(order.fillPrice ?? order.price)}</div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {order.filledAvgPrice != null
+                        ? `Avg ${formatCurrency(order.filledAvgPrice)}`
+                        : 'Awaiting fill'}
+                      {order.limitPrice != null ? ` · Limit ${formatCurrency(order.limitPrice)}` : ''}
+                      {order.stopPrice != null ? ` · Stop ${formatCurrency(order.stopPrice)}` : ''}
+                    </p>
+                    {submitted ? (
+                      <p className="mt-1 text-[11px] text-slate-400">Submitted {submitted}</p>
+                    ) : null}
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">Fees {formatCurrency(order.fees)} · Realism {order.realism}</p>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         ) : null}

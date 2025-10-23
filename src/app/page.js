@@ -1,9 +1,12 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import { getServerSession } from 'next-auth';
+
 import GlobalStyles from '../components/GlobalStyles';
 import SiteFooter from '../components/SiteFooter';
 import SiteHeader from '../components/SiteHeader';
 import SITE_SEARCH_INDEX from '../data/searchIndex';
+import { authOptions } from '../lib/auth';
 
 const NAV_SECTIONS = [
   { id: 'home', label: 'HOME' },
@@ -14,7 +17,11 @@ const NAV_SECTIONS = [
   { id: 'support', label: 'SUPPORT' }
 ];
 
-export default function Home() {
+export default async function Home() {
+  const session = await getServerSession(authOptions);
+  const isAuthenticated = Boolean(session);
+  const guard = (path) => (isAuthenticated ? path : `/auth/signup?callbackUrl=${encodeURIComponent(path)}`);
+
   return (
     <>
       <GlobalStyles />
@@ -37,12 +44,20 @@ export default function Home() {
                 Learn markets the safe way: code strategies, backtest with real data, and paper-trade. Roadmaps, challenges, and zero real money.
               </p>
               <div className="hero-cta-group flex flex-col sm:flex-row gap-4 items-center justify-center mb-6">
-                <button className="cta-primary min-h-[52px] px-7" style={{fontSize: '20px', letterSpacing: '-0.4px'}}>
-                  Sign Up
-                </button>
-                <button className="cta-pill min-h-[52px] px-7" style={{fontSize: '20px', letterSpacing: '-0.4px'}}>
+                <Link
+                  href={isAuthenticated ? '/codelab' : '/auth/signup?callbackUrl=/learn'}
+                  className="cta-primary min-h-[52px] px-7"
+                  style={{fontSize: '20px', letterSpacing: '-0.4px'}}
+                >
+                  {isAuthenticated ? 'Enter CodeLab' : 'Sign Up'}
+                </Link>
+                <Link
+                  href="#learn"
+                  className="cta-pill min-h-[52px] px-7"
+                  style={{fontSize: '20px', letterSpacing: '-0.4px'}}
+                >
                   Learn More
-                </button>
+                </Link>
               </div>
               <p className="text-white font-light text-center"
                  style={{fontFamily: 'Bricolage Grotesque', fontSize: '16px', lineHeight: 'normal', letterSpacing: '0px'}}>
@@ -93,14 +108,14 @@ export default function Home() {
                   </h2>
                   <div className="flex gap-4 mt-8 flex-wrap learn-cta-group">
                     <Link
-                      href="/learn"
+                      href={guard('/learn')}
                       className="cta-primary px-7"
                       style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
                     >
                       Get Started
                     </Link>
                     <Link
-                      href="/learn"
+                      href={guard('/paper-trading')}
                       className="cta-pill px-7"
                       style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
                     >
@@ -225,7 +240,7 @@ export default function Home() {
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4 code-cta-group">
                     <Link
-                      href="/codelab"
+                      href={guard('/codelab')}
                       className="cta-primary px-7"
                       style={{fontSize: '18px', letterSpacing: '-0.4px'}}
                     >
@@ -336,14 +351,14 @@ backtest(crossover).run('AAPL');`}</pre>
                   </ul>
                   <div className="flex flex-wrap gap-4">
                     <Link
-                      href="/paper-trading"
+                      href={guard('/paper-trading')}
                       className="cta-primary px-7"
                       style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
                     >
                       Launch paper desk
                     </Link>
                     <Link
-                      href="/paper-trading#desk"
+                      href={guard('/paper-trading#desk')}
                       className="cta-pill px-7"
                       style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
                     >

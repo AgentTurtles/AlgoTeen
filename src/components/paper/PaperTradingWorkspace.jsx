@@ -10,17 +10,17 @@ import RightRail from './RightRail';
 import Toast from './Toast';
 import TradeChart from './TradeChart';
 import WatchlistPanel from './WatchlistPanel';
-import { DAILY_LOSS_LIMITS, JOURNAL_TAGS, REALISM_LEVELS, WATCHLISTS } from './data';
+import { DAILY_LOSS_LIMITS, JOURNAL_TAGS, WATCHLISTS } from './data';
 import { formatCurrency, getLocalStorageValue, roundTo, setLocalStorageValue } from './utils';
 
 const DEFAULT_LOT_SIZE = 100;
 
 const TIMEFRAME_PRESETS = [
-  { id: '1D', label: '1D', bars: 96 },
-  { id: '5D', label: '5D', bars: 96 * 5 },
-  { id: '1M', label: '1M', bars: 96 * 20 },
-  { id: '6M', label: '6M', bars: 96 * 40 },
-  { id: '1Y', label: '1Y', bars: 96 * 78 }
+  { id: '1D', label: '1D', bars: 78, timeframe: '5Min', limit: 78 },
+  { id: '5D', label: '5D', bars: 130, timeframe: '15Min', limit: 130 },
+  { id: '1M', label: '1M', bars: 30, timeframe: '1Day', limit: 30 },
+  { id: '6M', label: '6M', bars: 130, timeframe: '1Day', limit: 130 },
+  { id: '1Y', label: '1Y', bars: 260, timeframe: '1Day', limit: 260 }
 ];
 
 function useStickyState(key, defaultValue) {
@@ -33,39 +33,41 @@ function useStickyState(key, defaultValue) {
   return [state, setState];
 }
 
-function deriveAccountSummary(positions, cash, priceLookup, startingBalance) {
-  const exposure = positions.reduce((sum, position) => {
-    const mark = priceLookup(position.symbol);
-    const value = mark * position.quantity;
-    return sum + value;
-  }, 0);
-
-  const equity = cash + exposure;
-
-  return {
-    cash: roundTo(cash, 2),
-    equity: roundTo(equity, 2),
-    buyingPower: roundTo(Math.max(0, cash), 2),
-    reserved: 0,
-    exposure: roundTo(exposure, 2),
-    startingBalance
-  };
+function formatSymbolForAlpaca(symbol, assetClass = 'stocks') {
+  if (!symbol) {
+    return symbol;
+  }
+  const base = symbol.toUpperCase();
+  if (assetClass === 'crypto' || assetClass === 'forex') {
+    return base.replace('/', '');
+  }
+  return base;
 }
 
 export default function PaperTradingWorkspace() {
   const { status: authStatus } = useSession();
   const defaultLists = useMemo(
-    () => WATCHLISTS.map((list) => ({
-      ...list,
-      symbols: list.symbols.map((symbol) => ({ ...symbol }))
-    })),
+    () =>
+      WATCHLISTS.map((list) => ({
+        ...list,
+        symbols: list.symbols.map((symbol) => ({
+          ...symbol,
+          assetClass: symbol.assetClass ?? list.assetClass ?? 'stocks'
+        }))
+      })),
     []
   );
 
   const [watchlists, setWatchlists] = useStickyState('algoteen-paper-watchlists', defaultLists);
 
   const flattenSymbols = useMemo(
-    () => watchlists.flatMap((list) => list.symbols.map((symbol) => ({ ...symbol }))),
+    () =>
+      watchlists.flatMap((list) =>
+        list.symbols.map((symbol) => ({
+          ...symbol,
+          assetClass: symbol.assetClass ?? list.assetClass ?? 'stocks'
+        }))
+      ),
     [watchlists]
   );
 
@@ -77,9 +79,7 @@ export default function PaperTradingWorkspace() {
     'algoteen-paper-symbol',
     WATCHLISTS[0].symbols[0].symbol
   );
-  const [realism, setRealism] = useStickyState('algoteen-paper-realism', REALISM_LEVELS[0].id);
   const [timeframe, setTimeframe] = useStickyState('algoteen-paper-timeframe', '1D');
-  const [showFlowOverview, setShowFlowOverview] = useStickyState('algoteen-paper-flow-open', true);
   const [lastAction, setLastAction] = useStickyState('algoteen-paper-last-action', null);
   const [watchQuery, setWatchQuery] = useState('');
   const [tourDismissed, setTourDismissed] = useStickyState('algoteen-paper-tour', false);
@@ -120,8 +120,10 @@ export default function PaperTradingWorkspace() {
   const [overlayState, setOverlayState] = useState({ sma: true, vwap: true, rsi: true });
   const [pendingMarkers, setPendingMarkers] = useState({ entry: null, stop: null, target: null });
   const [toastQueue, setToastQueue] = useState([]);
+  const [alpacaStatus, setAlpacaStatus] = useState({ loading: true, connected: false, account: null, error: null });
+  const [credentialsDraft, setCredentialsDraft] = useState({ apiKey: '', secretKey: '', submitting: false, error: null });
+  const [disconnecting, setDisconnecting] = useState(false);
   const toastIdRef = useRef(0);
-  const [showStarterBalance, setShowStarterBalance] = useState(() => account.equity === 0);
   const [journalDraft, setJournalDraft] = useState(null);
   const [placing, setPlacing] = useState(false);
   const [clock, setClock] = useState(null);
@@ -136,18 +138,259 @@ export default function PaperTradingWorkspace() {
   const ticketRef = useRef(null);
   const positionsRef = useRef(null);
 
+  const loadAccount = useCallback(async () => {
+    if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
+      return;
+    }
+    try {
+      const response = await fetch('/api/alpaca/account', { credentials: 'include' });
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      const raw = payload.data ?? {};
+      setAccount({
+        equity: Number.parseFloat(raw.equity ?? raw.last_equity ?? 0) || 0,
+        cash: Number.parseFloat(raw.cash ?? 0) || 0,
+        buyingPower: Number.parseFloat(raw.buying_power ?? raw.cash ?? 0) || 0,
+        reserved: Number.parseFloat(raw.long_market_value ?? 0) || 0,
+        startingBalance: Number.parseFloat(raw.last_equity ?? raw.equity ?? 0) || 0
+      });
+    } catch (error) {
+      // ignore network errors
+    }
+  }, [alpacaStatus.connected, authStatus]);
+
+  const loadPositions = useCallback(async () => {
+    if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
+      return;
+    }
+    try {
+      const response = await fetch('/api/alpaca/positions', { credentials: 'include' });
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      const list = Array.isArray(payload.data) ? payload.data : [];
+      setPositions((current) =>
+        list.map((item) => {
+          const id = item.asset_id ?? `${item.symbol}-${item.side ?? 'long'}`;
+          const existing = current.find((position) => position.id === id);
+          return {
+            id,
+            symbol: item.symbol,
+            quantity: Number.parseFloat(item.qty ?? item.quantity ?? 0) || 0,
+            entryPrice: Number.parseFloat(item.avg_entry_price ?? 0) || 0,
+            marketValue: Number.parseFloat(item.market_value ?? 0) || 0,
+            side: (item.side ?? 'long').toLowerCase(),
+            markPrice: Number.parseFloat(item.current_price ?? item.avg_entry_price ?? 0) || 0,
+            unrealizedPl: Number.parseFloat(item.unrealized_pl ?? 0) || 0,
+            unrealizedPlpc: Number.parseFloat(item.unrealized_plpc ?? 0) || 0,
+            priceTrail: existing?.priceTrail ?? []
+          };
+        })
+      );
+    } catch (error) {
+      // ignore
+    }
+  }, [alpacaStatus.connected, authStatus]);
+
+  const loadOrders = useCallback(async () => {
+    if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
+      return;
+    }
+    try {
+      const response = await fetch('/api/alpaca/orders?status=all&limit=100&direction=desc', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        return;
+      }
+      const payload = await response.json();
+      const list = Array.isArray(payload.data) ? payload.data : [];
+      const mapped = list.map((order) => {
+        const submittedAt = order.submitted_at ? Date.parse(order.submitted_at) : Date.now();
+        const updatedAt = order.updated_at ? Date.parse(order.updated_at) : null;
+        const filledAvgPrice = order.filled_avg_price != null ? Number.parseFloat(order.filled_avg_price) || 0 : null;
+        const limitPrice = order.limit_price != null ? Number.parseFloat(order.limit_price) || 0 : null;
+        const stopPrice = order.stop_price != null ? Number.parseFloat(order.stop_price) || 0 : null;
+        const displayPrice =
+          filledAvgPrice != null
+            ? filledAvgPrice
+            : limitPrice != null && limitPrice !== 0
+              ? limitPrice
+              : stopPrice != null
+                ? stopPrice
+                : null;
+        return {
+          id: order.id,
+          symbol: order.symbol,
+          side: order.side,
+          quantity: Number.parseFloat(order.qty ?? 0) || 0,
+          filledQuantity: Number.parseFloat(order.filled_qty ?? 0) || 0,
+          filledAvgPrice,
+          type: order.type,
+          status: order.status,
+          limitPrice,
+          stopPrice,
+          timeInForce: order.time_in_force,
+          orderClass: order.order_class ?? null,
+          submittedAt: Number.isFinite(submittedAt) ? submittedAt : Date.now(),
+          updatedAt: Number.isFinite(updatedAt) ? updatedAt : null,
+          legs: Array.isArray(order.legs) ? order.legs : [],
+          notional: order.notional != null ? Number.parseFloat(order.notional) || null : null,
+          price: displayPrice,
+          index: null
+        };
+      });
+      mapped.sort((a, b) => (b.submittedAt ?? 0) - (a.submittedAt ?? 0));
+      setOrders(mapped);
+    } catch (error) {
+      // ignore
+    }
+  }, [alpacaStatus.connected, authStatus]);
+
+  const refreshCredentials = useCallback(async () => {
+    if (authStatus !== 'authenticated') {
+      setAlpacaStatus({ loading: false, connected: false, account: null, error: null });
+      return;
+    }
+    setAlpacaStatus((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const response = await fetch('/api/alpaca/credentials', { credentials: 'include' });
+      if (!response.ok) {
+        if (response.status === 401) {
+          setAlpacaStatus({ loading: false, connected: false, account: null, error: null });
+          return;
+        }
+        throw new Error('Unable to load Alpaca credentials');
+      }
+      const payload = await response.json();
+      setAlpacaStatus({
+        loading: false,
+        connected: Boolean(payload?.hasCredentials),
+        account: payload?.account ?? null,
+        error: null
+      });
+    } catch (error) {
+      setAlpacaStatus({
+        loading: false,
+        connected: false,
+        account: null,
+        error: 'Unable to reach Alpaca credentials right now.'
+      });
+    }
+  }, [authStatus]);
+
+  const connectAlpaca = useCallback(
+    async () => {
+      const apiKey = credentialsDraft.apiKey.trim();
+      const secretKey = credentialsDraft.secretKey.trim();
+
+      if (!apiKey || !secretKey) {
+        setCredentialsDraft((prev) => ({
+          ...prev,
+          error: 'Enter both your Alpaca API key and secret key to connect.'
+        }));
+        return;
+      }
+
+      setAlpacaStatus((prev) => ({ ...prev, error: null }));
+      setCredentialsDraft((prev) => ({ ...prev, submitting: true, error: null }));
+      try {
+        const response = await fetch('/api/alpaca/credentials', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey, secretKey })
+        });
+
+        let payload = {};
+        try {
+          payload = await response.json();
+        } catch (error) {
+          payload = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(payload?.error ?? 'Unable to connect to Alpaca right now.');
+        }
+
+        setCredentialsDraft({ apiKey: '', secretKey: '', submitting: false, error: null });
+        setAlpacaStatus({
+          loading: false,
+          connected: true,
+          account: payload?.account ?? null,
+          error: null
+        });
+
+        pushToast({ title: 'Alpaca connected', message: 'Paper account ready — live orders now route to Alpaca.' });
+
+        await Promise.all([loadAccount(), loadPositions(), loadOrders()]);
+      } catch (error) {
+        const message = error?.message ?? 'Unable to connect to Alpaca right now.';
+        setCredentialsDraft((prev) => ({ ...prev, submitting: false, error: message }));
+        setAlpacaStatus((prev) => ({ ...prev, loading: false, connected: false, error: message }));
+      }
+    },
+    [
+      credentialsDraft.apiKey,
+      credentialsDraft.secretKey,
+      loadAccount,
+      loadOrders,
+      loadPositions,
+      pushToast
+    ]
+  );
+
+  const disconnectAlpaca = useCallback(
+    async () => {
+      setDisconnecting(true);
+      try {
+        const response = await fetch('/api/alpaca/credentials', {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+
+        let payload = {};
+        try {
+          payload = await response.json();
+        } catch (error) {
+          payload = {};
+        }
+
+        if (!response.ok) {
+          throw new Error(payload?.error ?? 'Unable to disconnect from Alpaca right now.');
+        }
+
+        setAlpacaStatus({ loading: false, connected: false, account: null, error: null });
+        setCredentialsDraft({ apiKey: '', secretKey: '', submitting: false, error: null });
+        setAccount({ equity: 0, cash: 0, buyingPower: 0, reserved: 0, startingBalance: 0 });
+        setPositions([]);
+        setOrders([]);
+        setEquityTimeline([]);
+        setLastAction(null);
+        setPendingMarkers({ entry: null, stop: null, target: null });
+        pushToast({ title: 'Alpaca disconnected', message: 'Removed keys — reconnect when you are ready to trade.' });
+      } catch (error) {
+        const message = error?.message ?? 'Unable to disconnect from Alpaca right now.';
+        pushToast({ title: 'Disconnect failed', message });
+      } finally {
+        setDisconnecting(false);
+      }
+    },
+    [pushToast]
+  );
+
+  useEffect(() => {
+    refreshCredentials();
+  }, [refreshCredentials]);
 
   useEffect(() => {
     setClock(new Date());
     const id = window.setInterval(() => setClock(new Date()), 60000);
     return () => window.clearInterval(id);
   }, []);
-
-  useEffect(() => {
-    if (account.equity > 0 && showStarterBalance) {
-      setShowStarterBalance(false);
-    }
-  }, [account.equity, showStarterBalance]);
 
   const getSymbolMeta = useCallback(
     (symbol) => flattenSymbols.find((item) => item.symbol === symbol),
@@ -160,81 +403,32 @@ export default function PaperTradingWorkspace() {
   );
 
   useEffect(() => {
-    if (authStatus !== 'authenticated') return undefined;
+    if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
+      return undefined;
+    }
     let active = true;
 
-    async function loadAccount() {
-      try {
-        const response = await fetch('/api/alpaca/account', { credentials: 'include' });
-        if (!active || !response.ok) return;
-        const payload = await response.json();
-        const raw = payload.data ?? {};
-        setAccount({
-          equity: Number.parseFloat(raw.equity ?? raw.last_equity ?? 0) || 0,
-          cash: Number.parseFloat(raw.cash ?? 0) || 0,
-          buyingPower: Number.parseFloat(raw.buying_power ?? raw.cash ?? 0) || 0,
-          reserved: Number.parseFloat(raw.long_market_value ?? 0) || 0,
-          startingBalance: Number.parseFloat(raw.last_equity ?? raw.equity ?? 0) || 0
-        });
-      } catch (error) {
-        // ignore network issues and keep last values
+    const bootstrap = async () => {
+      await Promise.all([loadAccount(), loadPositions(), loadOrders()]);
+    };
+
+    bootstrap();
+
+    const accountId = window.setInterval(() => {
+      if (active) {
+        loadAccount();
       }
-    }
-
-    async function loadPositions() {
-      try {
-        const response = await fetch('/api/alpaca/positions', { credentials: 'include' });
-        if (!active || !response.ok) return;
-        const payload = await response.json();
-        const list = Array.isArray(payload.data) ? payload.data : [];
-        setPositions(
-          list.map((item) => ({
-            id: item.asset_id ?? `${item.symbol}-${item.side}`,
-            symbol: item.symbol,
-            quantity: Number.parseFloat(item.qty ?? item.quantity ?? 0) || 0,
-            entryPrice: Number.parseFloat(item.avg_entry_price ?? 0) || 0,
-            marketValue: Number.parseFloat(item.market_value ?? 0) || 0,
-            side: (item.side ?? 'long').toLowerCase(),
-            markPrice: Number.parseFloat(item.current_price ?? item.avg_entry_price ?? 0) || 0,
-            priceTrail: []
-          }))
-        );
-      } catch (error) {
-        // ignore
+    }, 60_000);
+    const positionsId = window.setInterval(() => {
+      if (active) {
+        loadPositions();
       }
-    }
-
-    async function loadOrders() {
-      try {
-        const response = await fetch('/api/alpaca/orders', { credentials: 'include' });
-        if (!active || !response.ok) return;
-        const payload = await response.json();
-        const list = Array.isArray(payload.data) ? payload.data : [];
-        setOrders(
-          list.map((order) => ({
-            id: order.id,
-            symbol: order.symbol,
-            side: order.side,
-            quantity: Number.parseFloat(order.qty ?? 0) || 0,
-            price: Number.parseFloat(order.limit_price ?? order.stop_price ?? order.avg_price ?? 0) || 0,
-            type: order.type,
-            status: order.status,
-            fees: Number.parseFloat(order.filled_avg_price ?? 0) * 0.0005,
-            realism: realism
-          }))
-        );
-      } catch (error) {
-        // ignore
+    }, 45_000);
+    const ordersId = window.setInterval(() => {
+      if (active) {
+        loadOrders();
       }
-    }
-
-    loadAccount();
-    loadPositions();
-    loadOrders();
-
-    const accountId = window.setInterval(loadAccount, 60_000);
-    const positionsId = window.setInterval(loadPositions, 45_000);
-    const ordersId = window.setInterval(loadOrders, 30_000);
+    }, 30_000);
 
     return () => {
       active = false;
@@ -242,7 +436,7 @@ export default function PaperTradingWorkspace() {
       window.clearInterval(positionsId);
       window.clearInterval(ordersId);
     };
-  }, [authStatus, realism]);
+  }, [alpacaStatus.connected, authStatus, loadAccount, loadOrders, loadPositions]);
 
   useEffect(() => {
     if (!positions.length) {
@@ -262,43 +456,75 @@ export default function PaperTradingWorkspace() {
   }, [getSymbolPrice, positions.length, setPositions]);
 
   useEffect(() => {
-    if (authStatus !== 'authenticated' || !selectedSymbol) return undefined;
+    if (!Number.isFinite(account.equity) || account.equity <= 0) {
+      return;
+    }
+    setEquityTimeline((prev) => {
+      const nextPoint = { timestamp: Date.now(), equity: roundTo(account.equity, 2) };
+      const last = prev[prev.length - 1];
+      if (last && Math.abs(last.equity - nextPoint.equity) < 0.01) {
+        return prev;
+      }
+      return [...prev.slice(-98), nextPoint];
+    });
+  }, [account.equity, setEquityTimeline]);
+
+  useEffect(() => {
+    if (!selectedSymbol) return undefined;
     let active = true;
 
     async function loadBars() {
       setChartLoading(true);
       setChartError(null);
       try {
-        const response = await fetch(
-          `/api/alpaca/bars?symbol=${encodeURIComponent(selectedSymbol)}&timeframe=${encodeURIComponent(timeframe)}`,
-          { credentials: 'include' }
-        );
+        const meta = getSymbolMeta(selectedSymbol);
+        const derivedAssetClass = meta?.assetClass ?? 'stocks';
+        const preset = TIMEFRAME_PRESETS.find((option) => option.id === timeframe);
+        const timeframeParam = preset?.timeframe ?? '1Day';
+        const limitParam = preset?.limit ?? 300;
+        const symbolParam = formatSymbolForAlpaca(selectedSymbol, derivedAssetClass);
+        const params = new URLSearchParams({
+          symbol: symbolParam,
+          timeframe: timeframeParam,
+          limit: String(limitParam),
+          assetClass: derivedAssetClass
+        });
+        const response = await fetch(`/api/alpaca/bars?${params.toString()}`, {
+          cache: 'no-store',
+          credentials: 'include'
+        });
         if (!active) return;
         if (!response.ok) {
-          setChartError('Unable to load price history right now.');
+          setChartSeries([]);
+          setChartError('Unable to load Alpaca market data right now.');
           return;
         }
         const payload = await response.json();
-        const bars = payload.data?.bars ?? [];
-        const fallbackSeries = payload.data?.fallback;
+        const bars = Array.isArray(payload?.data?.bars) ? payload.data.bars : [];
+        if (!bars.length) {
+          setChartSeries([]);
+          setChartError('No Alpaca data available for this selection.');
+          return;
+        }
         const transformed = bars.map((bar, index) => ({
-          index,
-          open: Number.parseFloat(bar.o ?? bar.open ?? 0) || 0,
-          high: Number.parseFloat(bar.h ?? bar.high ?? 0) || 0,
-          low: Number.parseFloat(bar.l ?? bar.low ?? 0) || 0,
-          close: Number.parseFloat(bar.c ?? bar.close ?? 0) || 0,
-          volume: Number.parseFloat(bar.v ?? bar.volume ?? 0) || 0,
-          time: bar.t ?? bar.time ?? index
+          index: bar.index ?? index,
+          open: Number.parseFloat(bar.open ?? bar.o ?? 0) || 0,
+          high: Number.parseFloat(bar.high ?? bar.h ?? 0) || 0,
+          low: Number.parseFloat(bar.low ?? bar.l ?? 0) || 0,
+          close: Number.parseFloat(bar.close ?? bar.c ?? 0) || 0,
+          volume: Number.parseFloat(bar.volume ?? bar.v ?? 0) || 0,
+          time: bar.t ? Date.parse(bar.t) || index : index
         }));
         setChartSeries(transformed);
         if (transformed.length) {
           const lastClose = transformed[transformed.length - 1].close;
           setLivePrices((prev) => ({ ...prev, [selectedSymbol]: lastClose }));
         }
-        setChartError(fallbackSeries ? 'Alpaca is offline — using cached simulation data.' : null);
+        setChartError(null);
       } catch (error) {
         if (!active) return;
-        setChartError('Unable to load price history right now.');
+        setChartSeries([]);
+        setChartError('Unable to load Alpaca market data right now.');
       } finally {
         if (active) {
           setChartLoading(false);
@@ -312,7 +538,7 @@ export default function PaperTradingWorkspace() {
       active = false;
       window.clearInterval(id);
     };
-  }, [authStatus, selectedSymbol, timeframe]);
+  }, [getSymbolMeta, selectedSymbol, timeframe]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return undefined;
@@ -349,7 +575,8 @@ export default function PaperTradingWorkspace() {
   }, [searchResults.length, setActiveWatchlistId, watchQuery]);
 
   const chartData = chartSeries;
-  const bestPrice = getSymbolPrice(selectedSymbol);
+  const rawBestPrice = getSymbolPrice(selectedSymbol);
+  const bestPrice = Number.isFinite(rawBestPrice) ? rawBestPrice : 0;
 
   const filteredWatchlists = useMemo(() => {
     const term = watchQuery.trim().toLowerCase();
@@ -375,13 +602,15 @@ export default function PaperTradingWorkspace() {
       id: 'alpaca-search',
       name: 'Alpaca matches',
       description: 'Symbols returned by your live Alpaca search.',
+      assetClass: 'stocks',
       symbols: searchResults.map((asset) => ({
         symbol: asset.symbol,
         name: asset.name ?? asset.symbol,
         sector: asset.exchange ?? 'Asset',
         price: livePrices[asset.symbol] ?? 0,
         changePct: 0,
-        volume: Number.parseFloat(asset.min_order_size ?? 0) || 0
+        volume: Number.parseFloat(asset.min_order_size ?? 0) || 0,
+        assetClass: 'stocks'
       }))
     };
 
@@ -403,11 +632,14 @@ export default function PaperTradingWorkspace() {
   }, [clock]);
 
   useEffect(() => {
+    if (!Number.isFinite(rawBestPrice) || rawBestPrice <= 0) {
+      return;
+    }
     setOrderDraft((prev) => ({
       ...prev,
-      limitPrice: prev.type === 'market' ? prev.limitPrice : roundTo(bestPrice, 2)
+      limitPrice: prev.type === 'market' ? prev.limitPrice : roundTo(rawBestPrice, 2)
     }));
-  }, [bestPrice]);
+  }, [rawBestPrice, setOrderDraft]);
 
   const handleOverlayToggle = useCallback((key, explicit) => {
     setOverlayState((prev) => ({
@@ -415,8 +647,6 @@ export default function PaperTradingWorkspace() {
       [key]: typeof explicit === 'boolean' ? explicit : !prev[key]
     }));
   }, []);
-
-  const realismConfig = useMemo(() => REALISM_LEVELS.find((item) => item.id === realism) ?? REALISM_LEVELS[0], [realism]);
 
   const handleChartClick = useCallback(
     (price) => {
@@ -536,10 +766,11 @@ export default function PaperTradingWorkspace() {
           return { ...list, symbols: clonedSymbols };
         }
         added = true;
+        const inferredClass = list.assetClass ?? 'stocks';
         return {
           ...list,
           symbols: [
-            { symbol: ticker, name: nameInput, sector: 'Custom', price, changePct: 0, volume: 0 },
+            { symbol: ticker, name: nameInput, sector: 'Custom', price, changePct: 0, volume: 0, assetClass: inferredClass },
             ...clonedSymbols
           ]
         };
@@ -576,7 +807,6 @@ export default function PaperTradingWorkspace() {
       targetPrice: target
     }));
     setPendingMarkers({ entry, stop, target });
-    setShowFlowOverview(false);
     ticketRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     pushToast({ title: 'Guided trade ready', message: 'We prefilled a starter ticket — review and run it.' });
   }, [
@@ -586,179 +816,190 @@ export default function PaperTradingWorkspace() {
     pushToast,
     selectedSymbol,
     setOrderDraft,
-    setPendingMarkers,
-    setShowFlowOverview
+    setPendingMarkers
   ]);
 
-  const executeOrder = useCallback(
+  const submitOrder = useCallback(
     async (draft, { symbol = selectedSymbol, source = 'ticket', quantityOverride } = {}) => {
+      if (!symbol) {
+        pushToast({ title: 'Select a symbol', message: 'Choose something from your watchlist before sending an order.' });
+        return;
+      }
+      if (authStatus !== 'authenticated') {
+        pushToast({ title: 'Sign in required', message: 'Connect your Alpaca paper account to trade in real time.' });
+        return;
+      }
+
+      if (!alpacaStatus.connected) {
+        pushToast({ title: 'Connect Alpaca', message: 'Link your Alpaca paper keys before placing live paper orders.' });
+        return;
+      }
+
+      const meta = getSymbolMeta(symbol);
+      const assetClass = meta?.assetClass ?? 'stocks';
+      const normalizedSymbol = formatSymbolForAlpaca(symbol, assetClass);
+
+      const rawQuantity = quantityOverride ?? draft.quantity ?? 0;
+      const quantity = Math.max(0.0001, Number.parseFloat(rawQuantity) || 0);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        pushToast({ title: 'Invalid quantity', message: 'Quantity must be above zero.' });
+        return;
+      }
+      const normalizedQty = roundTo(quantity, 4);
+
+      const marketPrice = getSymbolPrice(symbol);
+      const ensurePrice = (value) => {
+        const parsed = Number.parseFloat(value);
+        if (!Number.isFinite(parsed)) return null;
+        return roundTo(parsed, 4);
+      };
+
+      const payload = {
+        symbol: normalizedSymbol,
+        side: draft.side,
+        qty: normalizedQty.toString(),
+        type: 'market',
+        time_in_force: draft.timeInForce ?? 'day'
+      };
+
+      if (draft.type === 'limit') {
+        payload.type = 'limit';
+        const limitPrice = ensurePrice(draft.limitPrice ?? marketPrice);
+        if (limitPrice != null) {
+          payload.limit_price = limitPrice;
+        }
+      } else if (draft.type === 'stop') {
+        const stopTrigger = ensurePrice(draft.stopTrigger ?? draft.stopPrice ?? marketPrice);
+        if (draft.stopLimit != null) {
+          payload.type = 'stop_limit';
+          const stopLimit = ensurePrice(draft.stopLimit);
+          if (stopLimit != null) {
+            payload.limit_price = stopLimit;
+          }
+        } else {
+          payload.type = 'stop';
+        }
+        if (stopTrigger != null) {
+          payload.stop_price = stopTrigger;
+        }
+      } else {
+        payload.type = 'market';
+      }
+
+      const stopAttachment = ensurePrice(draft.stopPrice);
+      const targetAttachment = ensurePrice(draft.targetPrice);
+
+      if (draft.bracket && stopAttachment != null && targetAttachment != null) {
+        payload.order_class = 'bracket';
+        payload.take_profit = { limit_price: targetAttachment };
+        payload.stop_loss = { stop_price: stopAttachment };
+      } else if (draft.oco && (stopAttachment != null || targetAttachment != null)) {
+        payload.order_class = 'oco';
+        if (targetAttachment != null) {
+          payload.take_profit = { limit_price: targetAttachment };
+        }
+        if (stopAttachment != null) {
+          payload.stop_loss = { stop_price: stopAttachment };
+        }
+      } else if (!draft.bracket && !draft.oco) {
+        if (stopAttachment != null || targetAttachment != null) {
+          payload.order_class = 'oto';
+          if (targetAttachment != null) {
+            payload.take_profit = { limit_price: targetAttachment };
+          }
+          if (stopAttachment != null) {
+            payload.stop_loss = { stop_price: stopAttachment };
+          }
+          if (!payload.take_profit && !payload.stop_loss) {
+            delete payload.order_class;
+          }
+        }
+      }
+
       setPlacing(true);
-      const quantity = Math.max(0.01, quantityOverride ?? draft.quantity);
-      const basePrice =
-        draft.type === 'market' ? getSymbolPrice(symbol) : draft.limitPrice ?? getSymbolPrice(symbol);
-      const direction = draft.side === 'buy' ? 1 : -1;
-      const slip = (realismConfig.slippageBps / 10000) * basePrice;
-      const fillPrice = roundTo(basePrice + direction * slip, 2);
-      const fees = roundTo(fillPrice * quantity * 0.0005, 2);
-      const series = symbol === selectedSymbol ? chartSeries : [];
-      const candleIndex = series.length ? series[series.length - 1].index : 0;
-      const timestamp = Date.now();
+      try {
+        const response = await fetch('/api/alpaca/orders', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
 
-      await new Promise((resolve) => window.setTimeout(resolve, 650));
-
-      setPositions((currentPositions) => {
-        const existing = currentPositions.find((position) => position.symbol === symbol);
-        let nextPositions = currentPositions;
-        let realizedPnl = 0;
-        let nextCash = account.cash;
-
-        if (draft.side === 'buy') {
-          if (existing) {
-            const newQty = existing.quantity + quantity;
-            const newEntry = (existing.entryPrice * existing.quantity + fillPrice * quantity) / newQty;
-            nextPositions = currentPositions.map((position) =>
-              position.id === existing.id
-                ? {
-                    ...position,
-                    quantity: newQty,
-                    entryPrice: roundTo(newEntry, 4),
-                    markPrice: getSymbolPrice(symbol),
-                    priceTrail: [...(position.priceTrail ?? []), fillPrice].slice(-30)
-                  }
-                : position
-            );
-          } else {
-            const newPosition = {
-              id: `pos-${timestamp}`,
-              symbol,
-              side: 'long',
-              quantity,
-              entryPrice: fillPrice,
-              markPrice: getSymbolPrice(symbol),
-              openedAt: timestamp,
-              priceTrail: [fillPrice]
-            };
-            nextPositions = [...currentPositions, newPosition];
-          }
-          nextCash = account.cash - fillPrice * quantity - fees;
-        } else {
-          if (!existing) {
-            pushToast({
-              title: 'Cannot sell',
-              message: 'You need an open long position to sell. Shorting is disabled in this classroom desk.'
-            });
-            setPlacing(false);
-            return currentPositions;
-          }
-          const remaining = existing.quantity - quantity;
-          realizedPnl = (fillPrice - existing.entryPrice) * Math.min(existing.quantity, quantity);
-          if (remaining <= 0) {
-            nextPositions = currentPositions.filter((position) => position.id !== existing.id);
-          } else {
-            nextPositions = currentPositions.map((position) =>
-              position.id === existing.id
-                ? {
-                    ...position,
-                    quantity: remaining,
-                    markPrice: getSymbolPrice(symbol),
-                    priceTrail: [...(position.priceTrail ?? []), fillPrice].slice(-30)
-                  }
-                : position
-            );
-          }
-          nextCash = account.cash + fillPrice * quantity - fees;
+        let json = null;
+        try {
+          json = await response.json();
+        } catch (error) {
+          json = null;
         }
 
-        const summary = deriveAccountSummary(nextPositions, nextCash, getSymbolPrice, account.startingBalance);
-        setAccount(summary);
-        setEquityTimeline((prev) => [...prev.slice(-98), { timestamp, equity: summary.equity }]);
+        if (!response.ok) {
+          const message = json?.error ?? 'Alpaca rejected the order.';
+          pushToast({ title: 'Order rejected', message });
+          return;
+        }
 
-        const orderRecord = {
-          id: `order-${timestamp}`,
+        const order = json?.data ?? {};
+        const submittedAt = order.submitted_at ? Date.parse(order.submitted_at) : Date.now();
+        const orderQty = Number.parseFloat(order.qty ?? order.quantity ?? normalizedQty) || normalizedQty;
+        const filledPrice = order.filled_avg_price != null ? Number.parseFloat(order.filled_avg_price) : null;
+        const fallbackPrice =
+          filledPrice ??
+          ensurePrice(draft.limitPrice ?? draft.stopTrigger ?? draft.stopPrice ?? draft.targetPrice ?? marketPrice) ??
+          marketPrice;
+        const actionTimestamp = Number.isFinite(submittedAt) ? submittedAt : Date.now();
+        const roundedPrice = roundTo(fallbackPrice, 4);
+        const roundedQty = roundTo(orderQty, 4);
+
+        setLastAction({
           symbol,
-          side: draft.side,
-          type: draft.type,
-          quantity,
-          price: fillPrice,
-          fillPrice,
-          estimatedCost: roundTo(fillPrice * quantity, 2),
-          fees,
-          status: 'Filled',
-          realism: realismConfig.name,
-          timestamp,
-          pnl: roundTo(realizedPnl, 2),
-          source,
-          index: candleIndex
-        };
-
-        setOrders((prev) => [orderRecord, ...prev.slice(0, 99)]);
-
-        if (realizedPnl !== 0) {
-          appendJournal({
-            id: `journal-${timestamp}`,
-            symbol,
-            side: draft.side,
-            quantity,
-            price: fillPrice,
-            timestamp,
-            tag: 'Recorded trade',
-            note: `Realised ${formatCurrency(realizedPnl)} ${realizedPnl >= 0 ? 'profit' : 'loss'}.`,
-            reaction: realizedPnl >= 0 ? '🎉' : '🧠'
-          });
-        } else {
-          setJournalDraft({
-            symbol,
-            side: draft.side,
-            quantity,
-            price: fillPrice,
-            timestamp
-          });
-        }
-
+          side: order.side ?? draft.side,
+          quantity: roundedQty,
+          price: roundedPrice,
+          timestamp: actionTimestamp
+        });
+        setPendingMarkers({ entry: null, stop: null, target: null });
+        setOrderDraft((prev) => ({ ...prev, stopPrice: null, targetPrice: null }));
+        setJournalDraft({
+          symbol,
+          side: order.side ?? draft.side,
+          quantity: roundedQty,
+          price: roundedPrice,
+          timestamp: actionTimestamp,
+          source
+        });
         pushToast({
-          title: `${draft.side === 'buy' ? 'Bought' : 'Sold'} ${quantity} ${symbol}`,
-          message: `Filled at ${formatCurrency(fillPrice)} with ${formatCurrency(fees)} fees.`,
+          title: 'Order submitted',
+          message: `Sent ${draft.side.toUpperCase()} ${roundedQty} ${symbol} via Alpaca.`,
           action: {
-            label: 'View on chart',
+            label: 'View orders',
             onClick: () => {
-              document.getElementById('paper-chart')?.scrollIntoView({ behavior: 'smooth' });
+              document.getElementById('paper-rail')?.scrollIntoView({ behavior: 'smooth' });
             }
           }
         });
 
-        setLastAction({ symbol, side: draft.side, quantity, price: fillPrice, timestamp });
-        setShowFlowOverview(false);
-
-        setPendingMarkers({ entry: null, stop: null, target: null });
-        setOrderDraft((prev) => ({
-          ...prev,
-          stopPrice: null,
-          targetPrice: null
-        }));
-
+        await Promise.all([loadAccount(), loadPositions(), loadOrders()]);
+      } catch (error) {
+        pushToast({ title: 'Order failed', message: 'Unable to reach Alpaca right now.' });
+      } finally {
         setPlacing(false);
-        return nextPositions;
-      });
+      }
     },
     [
-      account.cash,
-      account.startingBalance,
-      appendJournal,
+      alpacaStatus.connected,
+      authStatus,
+      getSymbolMeta,
       getSymbolPrice,
+      loadAccount,
+      loadOrders,
+      loadPositions,
       pushToast,
-      realismConfig,
       selectedSymbol,
-      setAccount,
-      setEquityTimeline,
       setJournalDraft,
       setLastAction,
-      setOrders,
-      setPendingMarkers,
-      setPlacing,
-      setPositions,
-      setShowFlowOverview,
       setOrderDraft,
-      chartSeries
+      setPendingMarkers,
+      setPlacing
     ]
   );
   const handleOrderSubmit = useCallback(
@@ -777,9 +1018,9 @@ export default function PaperTradingWorkspace() {
           }
         }
       }
-      executeOrder(draft, { symbol: selectedSymbol, source: 'ticket' });
+      submitOrder(draft, { symbol: selectedSymbol, source: 'ticket' });
     },
-    [account.equity, account.startingBalance, executeOrder, pushToast, riskSettings.dailyLossLimit, selectedSymbol]
+    [account.equity, account.startingBalance, pushToast, riskSettings.dailyLossLimit, selectedSymbol, submitOrder]
   );
 
   const handleClosePosition = useCallback(
@@ -787,30 +1028,53 @@ export default function PaperTradingWorkspace() {
       const position = positions.find((item) => item.id === positionId);
       if (!position) return;
       const qty = Math.max(0.01, roundTo(position.quantity * fraction, 4));
-      executeOrder(
+      submitOrder(
         {
           ...orderDraft,
           side: 'sell',
           type: 'market',
-          quantity: qty
+          quantity: qty,
+          limitPrice: null,
+          stopTrigger: null,
+          stopLimit: null,
+          stopPrice: null,
+          targetPrice: null,
+          bracket: false,
+          oco: false
         },
         { symbol: position.symbol, source: 'rail-close', quantityOverride: qty }
       );
     },
-    [executeOrder, orderDraft, positions]
+    [orderDraft, positions, submitOrder]
   );
 
   const handleExportCsv = useCallback(() => {
     if (orders.length === 0) return;
-    const header = ['Timestamp', 'Symbol', 'Side', 'Quantity', 'FillPrice', 'Fees', 'PnL'];
+    const header = [
+      'SubmittedAt',
+      'Symbol',
+      'Side',
+      'Type',
+      'Status',
+      'OrderClass',
+      'Qty',
+      'FilledQty',
+      'FilledAvgPrice',
+      'LimitPrice',
+      'StopPrice'
+    ];
     const rows = orders.map((order) => [
-      new Date(order.timestamp).toISOString(),
+      order.submittedAt ? new Date(order.submittedAt).toISOString() : '',
       order.symbol,
       order.side,
+      order.type,
+      order.status,
+      order.orderClass ?? '',
       order.quantity,
-      order.fillPrice,
-      order.fees,
-      order.pnl
+      order.filledQuantity,
+      order.filledAvgPrice ?? '',
+      order.limitPrice ?? '',
+      order.stopPrice ?? ''
     ]);
     const csv = [header, ...rows]
       .map((row) => row.join(','))
@@ -829,26 +1093,15 @@ export default function PaperTradingWorkspace() {
   const analytics = useMemo(() => {
     const baseline = account.startingBalance || account.equity;
     const totalReturn = baseline ? ((account.equity - baseline) / baseline) * 100 : 0;
-    const filledTrades = orders.filter((order) => order.status === 'Filled');
-    const winners = filledTrades.filter((order) => order.pnl > 0).length;
-    const winRate = filledTrades.length ? (winners / filledTrades.length) * 100 : 0;
-
-    let maxDrawdown = 0;
-    let peak = equityTimeline.length ? equityTimeline[0].equity : baseline;
-    equityTimeline.forEach((point) => {
-      peak = Math.max(peak, point.equity);
-      const dd = peak ? ((point.equity - peak) / peak) * 100 : 0;
-      if (dd < maxDrawdown) maxDrawdown = dd;
+    const filledOrders = orders.filter((order) => {
+      const status = (order.status ?? '').toLowerCase();
+      return status === 'filled' || order.filledQuantity > 0;
     });
-
-    const returns = filledTrades
-      .map((order) => (order.estimatedCost ? order.pnl / order.estimatedCost : 0))
-      .filter((value) => Number.isFinite(value));
-    const avgReturn = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
-    const variance = returns.length
-      ? returns.reduce((sum, value) => sum + (value - avgReturn) ** 2, 0) / returns.length
-      : 0;
-    const sharpe = variance === 0 ? 0 : avgReturn / Math.sqrt(variance);
+    const openOrders = orders.filter((order) => (order.status ?? '').toLowerCase() !== 'filled').length;
+    const filledNotional = filledOrders.reduce((sum, order) => {
+      const price = Number.isFinite(order.filledAvgPrice) ? order.filledAvgPrice : 0;
+      return sum + price * (order.filledQuantity ?? 0);
+    }, 0);
 
     const previousEquity = equityTimeline.length > 1 ? equityTimeline[equityTimeline.length - 2].equity : null;
     const previousReturn = previousEquity && baseline ? ((previousEquity - baseline) / baseline) * 100 : null;
@@ -857,9 +1110,9 @@ export default function PaperTradingWorkspace() {
     return {
       metrics: [
         { label: 'Total return', value: `${totalReturn.toFixed(2)}%`, delta },
-        { label: 'Win rate', value: `${winRate.toFixed(0)}%`, delta: null },
-        { label: 'Max DD', value: `${maxDrawdown.toFixed(2)}%`, delta: null },
-        { label: 'Sharpe', value: sharpe ? sharpe.toFixed(2) : '0.00', delta: null }
+        { label: 'Filled orders', value: String(filledOrders.length), delta: null },
+        { label: 'Open orders', value: String(openOrders), delta: null },
+        { label: 'Filled notional', value: formatCurrency(filledNotional), delta: null }
       ]
     };
   }, [account.equity, account.startingBalance, equityTimeline, orders]);
@@ -882,8 +1135,8 @@ export default function PaperTradingWorkspace() {
               <p className="text-sm font-semibold text-slate-900">Teen Challenge Account</p>
               <p className="text-xs text-slate-500">AlgoTeen Paper Desk</p>
             </div>
-            <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
-              Simulated
+            <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              Alpaca Paper
             </span>
           </div>
           <div className="flex items-center gap-6 text-sm">
@@ -914,24 +1167,9 @@ export default function PaperTradingWorkspace() {
             </span>
             <span>{marketStatus.clock}</span>
           </div>
-          <div className="flex items-center gap-2">
-            {REALISM_LEVELS.map((level) => {
-              const isActive = level.id === realism;
-              return (
-                <button
-                  key={level.id}
-                  type="button"
-                  onClick={() => setRealism(level.id)}
-                  className={`rounded-full px-3 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 ${
-                    isActive
-                      ? 'bg-blue-700 text-white shadow-sm'
-                      : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                  }`}
-                >
-                  {level.name}
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <span className="rounded-full border border-slate-200 px-3 py-1">Live paper execution</span>
+            <span className="hidden sm:inline">Polygon data · Alpaca orders</span>
           </div>
           <div className="text-xs font-medium text-slate-500">Last action: {lastActionCopy}</div>
         </div>
@@ -956,35 +1194,174 @@ export default function PaperTradingWorkspace() {
 
         <main className="flex min-w-0 flex-1 justify-center px-6 py-6">
           <div className="flex w-full max-w-5xl flex-col gap-6">
-            {showFlowOverview ? (
-            <section className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Flow overview</h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Watchlist → chart → ticket → positions. Start on the left, finish on the right — no zig-zag required.
+            <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
+              {alpacaStatus.loading ? (
+                <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-slate-600">
+                  <div>
+                    <p className="text-base font-semibold text-slate-900">Checking Alpaca connection…</p>
+                    <p className="mt-1 text-xs text-slate-500">We are making sure your paper keys are still valid.</p>
+                  </div>
+                  <span className="inline-flex h-3 w-3 animate-ping rounded-full bg-emerald-500" aria-hidden="true" />
+                </div>
+              ) : alpacaStatus.connected ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="text-base font-semibold text-slate-900">Alpaca paper account connected</p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {alpacaStatus.account?.account_number
+                          ? `Account ${alpacaStatus.account.account_number}`
+                          : 'Keys encrypted with your AlgoTeen account.'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                        onClick={refreshCredentials}
+                        disabled={alpacaStatus.loading}
+                      >
+                        Refresh status
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={disconnectAlpaca}
+                        disabled={disconnecting}
+                      >
+                        {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Status</p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {(alpacaStatus.account?.status ?? 'active').toString().replace(/_/g, ' ')}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Currency</p>
+                      <p className="mt-1 font-semibold text-slate-900">{alpacaStatus.account?.currency ?? 'USD'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Buying power</p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {formatCurrency(
+                          Number.parseFloat(alpacaStatus.account?.buying_power ?? account.buyingPower ?? 0) || 0
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Your Alpaca API keys stay encrypted in Supabase. We surface account status and buying power automatically.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowFlowOverview(false)}
-                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900"
+              ) : (
+                <form
+                  className="space-y-5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    connectAlpaca();
+                  }}
                 >
-                  Got it
-                </button>
-              </div>
-              <p className="mt-3 text-xs text-slate-500">{realismConfig.description}</p>
+                  <div>
+                    <p className="text-base font-semibold text-slate-900">Connect to Alpaca paper trading</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Paste the API key pair from your Alpaca dashboard. We will verify them and store them securely.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700" htmlFor="alpaca-api-key">
+                      API key
+                      <input
+                        id="alpaca-api-key"
+                        type="text"
+                        autoComplete="off"
+                        value={credentialsDraft.apiKey}
+                        onChange={(event) => {
+                          setCredentialsDraft((prev) => ({ ...prev, apiKey: event.target.value, error: null }));
+                          setAlpacaStatus((prev) => ({ ...prev, error: null }));
+                        }}
+                        className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                        placeholder="PKxxxxxxxx"
+                        required
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-medium text-slate-700" htmlFor="alpaca-secret-key">
+                      Secret key
+                      <input
+                        id="alpaca-secret-key"
+                        type="password"
+                        autoComplete="new-password"
+                        value={credentialsDraft.secretKey}
+                        onChange={(event) => {
+                          setCredentialsDraft((prev) => ({ ...prev, secretKey: event.target.value, error: null }));
+                          setAlpacaStatus((prev) => ({ ...prev, error: null }));
+                        }}
+                        className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                        placeholder="SKxxxxxxxx"
+                        required
+                      />
+                    </label>
+                  </div>
+                  {credentialsDraft.error || alpacaStatus.error ? (
+                    <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {credentialsDraft.error ?? alpacaStatus.error}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      We only use these keys for paper trading. Disconnect anytime to remove them from storage.
+                    </p>
+                    <button
+                      type="submit"
+                      disabled={credentialsDraft.submitting}
+                      className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-400/60"
+                    >
+                      {credentialsDraft.submitting ? 'Connecting…' : 'Connect Alpaca keys'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </section>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowFlowOverview(true)}
-                className="flex items-center justify-between rounded-3xl border border-dashed border-slate-300 bg-white/70 px-6 py-4 text-left text-xs font-medium text-slate-500 shadow-sm transition hover:border-slate-400"
-              >
-                <span>Flow overview hidden. Tap to reopen the guided tips.</span>
-                <span className="text-blue-700">Show tips</span>
-              </button>
-            )}
+            <section className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <h2 className="text-xl font-semibold text-slate-900">Paper trading flow</h2>
+                <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">
+                  Orders settle via Alpaca paper
+                </span>
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                {[
+                  {
+                    label: 'Pick a symbol',
+                    description: 'Watchlist drives the chart, ticket, and risk panels.'
+                  },
+                  {
+                    label: 'Mark entry & risk',
+                    description: 'Click the chart to prefill the ticket, then drag ghost stop/target lines.'
+                  },
+                  {
+                    label: 'Send the paper order',
+                    description: 'Review cost, risk, and fills before journaling the trade.'
+                  }
+                ].map((item, index) => (
+                  <div key={item.label} className="flex items-start gap-3">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white">
+                      {index + 1}
+                    </span>
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+                      <p className="text-xs text-slate-500">{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-xs text-slate-500">
+                Fill estimates use live Alpaca quotes—review cost and risk before sending each simulated ticket.
+              </p>
+            </section>
 
             <div className="relative">
               <TradeChart
@@ -996,7 +1373,9 @@ export default function PaperTradingWorkspace() {
                 onChartDoubleClick={handleChartDoubleClick}
                 onMarkerChange={handleMarkerChange}
                 markers={pendingMarkers}
-                filledOrders={orders.filter((order) => order.symbol === selectedSymbol && order.status === 'Filled')}
+                filledOrders={orders.filter(
+                  (order) => order.symbol === selectedSymbol && (order.status ?? '').toLowerCase() === 'filled'
+                )}
                 activeSide={orderDraft.side}
                 reference={chartRef}
                 timeframe={timeframe}
@@ -1006,7 +1385,7 @@ export default function PaperTradingWorkspace() {
               />
               {chartLoading ? (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-white/65 text-sm font-medium text-slate-600">
-                  Refreshing Alpaca data…
+                  Refreshing market data…
                 </div>
               ) : null}
             </div>
@@ -1026,31 +1405,7 @@ export default function PaperTradingWorkspace() {
               bestPrice={bestPrice}
               reference={ticketRef}
               lotSize={DEFAULT_LOT_SIZE}
-              realismConfig={realismConfig}
-              baselineRealism={REALISM_LEVELS[0]}
             />
-
-          <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-slate-900">Simulation engine notes</h3>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                <p className="text-sm font-semibold text-slate-900">How fills work</p>
-                <ul className="mt-2 space-y-2 text-sm">
-                  <li>Market orders fill next tick plus {realismConfig.slippageBps} bps slippage.</li>
-                  <li>Limit orders fill when touched or improved, respecting your time-in-force.</li>
-                  <li>Stops trigger into market or limit depending on the tab. Partial fills appear if you oversize.</li>
-                  <li>Fees model a 0.05% rate; toggle realism for deeper slippage and latency.</li>
-                </ul>
-              </div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                <p className="text-sm font-semibold text-slate-900">Example order</p>
-                <p className="mt-2 text-sm text-slate-600">
-                  Buy 5 shares at {formatCurrency(bestPrice)} → est. cost {formatCurrency(bestPrice * 5)} + fees {formatCurrency(bestPrice * 5 * 0.0005)}.
-                  A 2% stop risks {formatCurrency(bestPrice * 5 * 0.02)}. Switch realism to see slippage change live.
-                </p>
-              </div>
-            </div>
-          </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
             <div className="flex items-center justify-between">
@@ -1098,38 +1453,6 @@ export default function PaperTradingWorkspace() {
         />
       </div>
 
-      {showStarterBalance ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/70 px-4">
-          <div className="max-w-md rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Kick off balance</p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">Pick a starter account</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              This desk simulates fills with slippage, fees, and timestamps. Choose a balance to see buying power and guardrails in action.
-            </p>
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              {[1000, 5000, 10000].map((amount) => (
-                <button
-                  key={amount}
-                  type="button"
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900"
-                  onClick={() => {
-                    const summary = deriveAccountSummary([], amount, getSymbolPrice, amount);
-                    setAccount(summary);
-                    setEquityTimeline([{ timestamp: Date.now(), equity: summary.equity }]);
-                    setShowStarterBalance(false);
-                  }}
-                >
-                  {formatCurrency(amount)}
-                </button>
-              ))}
-            </div>
-            <p className="mt-4 text-xs text-slate-500">
-              We simulate fills at the next tick with configurable slippage and fees. Corporate actions and commissions are applied automatically.
-            </p>
-          </div>
-        </div>
-      ) : null}
-
       {journalDraft ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/70 px-4">
           <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-xl">
@@ -1155,7 +1478,7 @@ export default function PaperTradingWorkspace() {
                         type="button"
                         className={`rounded-full border px-3 py-1 text-xs font-semibold ${
                           active
-                            ? 'border-blue-700 bg-blue-700 text-white'
+                            ? 'border-emerald-600 bg-emerald-600 text-white'
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
                         }`}
                         onClick={() => setJournalDraft((prev) => ({ ...prev, tag }))}
@@ -1176,7 +1499,7 @@ export default function PaperTradingWorkspace() {
                         key={emoji}
                         type="button"
                         className={`rounded-full border px-3 py-1 text-base ${
-                          active ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                          active ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
                         }`}
                         onClick={() => setJournalDraft((prev) => ({ ...prev, reaction: emoji }))}
                       >
@@ -1192,7 +1515,7 @@ export default function PaperTradingWorkspace() {
                 </label>
                 <textarea
                   id="journal-note"
-                  className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
                   rows={3}
                   value={journalDraft.note ?? ''}
                   onChange={(event) => setJournalDraft((prev) => ({ ...prev, note: event.target.value }))}
@@ -1210,7 +1533,7 @@ export default function PaperTradingWorkspace() {
               </button>
               <button
                 type="button"
-                className="rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
                 onClick={() => {
                   appendJournal({ ...journalDraft, id: `journal-${Date.now()}` });
                   setJournalDraft(null);

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 
-const SignInPage = dynamic(() => import('./SignInClient'), {
+const SignUpPage = dynamic(() => import('./SignUpClient'), {
   ssr: false,
   loading: () => (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-50 via-white to-emerald-100/40">
@@ -15,6 +15,7 @@ const SignInPage = dynamic(() => import('./SignInClient'), {
               <div className="h-12 bg-emerald-200 rounded"></div>
               <div className="h-12 bg-emerald-200 rounded"></div>
               <div className="h-12 bg-emerald-200 rounded"></div>
+              <div className="h-12 bg-emerald-200 rounded"></div>
             </div>
           </div>
         </div>
@@ -24,5 +25,5 @@ const SignInPage = dynamic(() => import('./SignInClient'), {
 });
 
 export default function Page() {
-  return <SignInPage />;
+  return <SignUpPage />;
 }
