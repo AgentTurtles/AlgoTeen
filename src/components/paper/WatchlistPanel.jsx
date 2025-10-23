@@ -9,8 +9,13 @@ export default function WatchlistPanel({
   reference,
   searchQuery,
   onSearchChange,
-  onAddSymbol
+  onAddSymbol,
+  status
 }) {
+  const { loading = false, error = null, lastUpdated = null } = status ?? {};
+  const lastUpdatedLabel = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : null;
   const activeList = lists.find((list) => list.id === activeListId);
   const symbols = activeList?.symbols ?? [];
 
@@ -59,6 +64,20 @@ export default function WatchlistPanel({
             className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           />
         </div>
+        {error ? (
+          <p className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {error}
+          </p>
+        ) : null}
+        <p className="mt-2 text-[11px] text-slate-500">
+          {loading ? (
+            <span className="font-semibold text-emerald-600">Refreshing Polygon prices…</span>
+          ) : lastUpdatedLabel ? (
+            <>Updated {lastUpdatedLabel}</>
+          ) : (
+            'Waiting for first Polygon refresh'
+          )}
+        </p>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 pb-6 pt-4">

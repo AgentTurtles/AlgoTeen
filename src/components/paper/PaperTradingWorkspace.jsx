@@ -10,17 +10,17 @@ import RightRail from './RightRail';
 import Toast from './Toast';
 import TradeChart from './TradeChart';
 import WatchlistPanel from './WatchlistPanel';
-import { DAILY_LOSS_LIMITS, JOURNAL_TAGS, WATCHLISTS } from './data';
+import { DAILY_LOSS_LIMITS, JOURNAL_TAGS, WATCHLIST_PRESETS } from './data';
 import { formatCurrency, getLocalStorageValue, roundTo, setLocalStorageValue } from './utils';
 
 const DEFAULT_LOT_SIZE = 100;
 
 const TIMEFRAME_PRESETS = [
-  { id: '1D', label: '1D', bars: 78, timeframe: '5Min', limit: 78 },
-  { id: '5D', label: '5D', bars: 130, timeframe: '15Min', limit: 130 },
-  { id: '1M', label: '1M', bars: 30, timeframe: '1Day', limit: 30 },
-  { id: '6M', label: '6M', bars: 130, timeframe: '1Day', limit: 130 },
-  { id: '1Y', label: '1Y', bars: 260, timeframe: '1Day', limit: 260 }
+  { id: '1D', label: '1D', bars: 78, timeframe: '5Min', limit: 120, lookbackDays: 5 },
+  { id: '5D', label: '5D', bars: 130, timeframe: '15Min', limit: 180, lookbackDays: 14 },
+  { id: '1M', label: '1M', bars: 30, timeframe: '1Day', limit: 60, lookbackDays: 90 },
+  { id: '6M', label: '6M', bars: 130, timeframe: '1Day', limit: 200, lookbackDays: 240 },
+  { id: '1Y', label: '1Y', bars: 260, timeframe: '1Day', limit: 400, lookbackDays: 420 }
 ];
 
 function useStickyState(key, defaultValue) {
@@ -44,11 +44,41 @@ function formatSymbolForAlpaca(symbol, assetClass = 'stocks') {
   return base;
 }
 
+function normalizeSymbolForAssetClass(symbol, assetClass = 'stocks') {
+  if (!symbol) {
+    return '';
+  }
+  const trimmed = symbol.trim().toUpperCase();
+  if (!trimmed) {
+    return '';
+  }
+  if (assetClass === 'crypto' || assetClass === 'forex') {
+    const sanitized = trimmed.replace(/[^A-Z0-9/]/g, '');
+    if (sanitized.includes('/')) {
+      const [base = '', quote = ''] = sanitized.split('/');
+      const normalizedBase = base.replace(/[^A-Z0-9]/g, '');
+      const normalizedQuote = quote.replace(/[^A-Z0-9]/g, '');
+      if (!normalizedBase || !normalizedQuote) {
+        return sanitized;
+      }
+      return `${normalizedBase}/${normalizedQuote}`;
+    }
+    const alphanumeric = sanitized.replace(/[^A-Z0-9]/g, '');
+    if (alphanumeric.length >= 6) {
+      const base = alphanumeric.slice(0, alphanumeric.length - 3);
+      const quote = alphanumeric.slice(-3);
+      return `${base}/${quote}`;
+    }
+    return alphanumeric;
+  }
+  return trimmed.replace(/[^A-Z0-9.]/g, '');
+}
+
 export default function PaperTradingWorkspace() {
   const { status: authStatus } = useSession();
   const defaultLists = useMemo(
     () =>
-      WATCHLISTS.map((list) => ({
+      WATCHLIST_PRESETS.map((list) => ({
         ...list,
         symbols: list.symbols.map((symbol) => ({
           ...symbol,
@@ -57,8 +87,37 @@ export default function PaperTradingWorkspace() {
       })),
     []
   );
+  const firstListId = defaultLists[0]?.id ?? null;
+  const firstSymbol = defaultLists[0]?.symbols?.[0]?.symbol ?? null;
 
   const [watchlists, setWatchlists] = useStickyState('algoteen-paper-watchlists', defaultLists);
+
+  useEffect(() => {
+    setWatchlists((prev) => {
+      let changed = false;
+      const normalizedLists = prev.map((list) => {
+        let listChanged = false;
+        const defaultClass = list.assetClass ?? 'stocks';
+        const symbols = Array.isArray(list.symbols)
+          ? list.symbols.map((symbol) => {
+              const resolvedClass = symbol.assetClass ?? defaultClass;
+              const normalizedSymbol = normalizeSymbolForAssetClass(symbol.symbol, resolvedClass);
+              if (symbol.symbol === normalizedSymbol && symbol.assetClass === resolvedClass) {
+                return symbol;
+              }
+              listChanged = true;
+              return { ...symbol, symbol: normalizedSymbol, assetClass: resolvedClass };
+            })
+          : [];
+        if (listChanged) {
+          changed = true;
+          return { ...list, symbols };
+        }
+        return list;
+      });
+      return changed ? normalizedLists : prev;
+    });
+  }, [setWatchlists]);
 
   const flattenSymbols = useMemo(
     () =>
@@ -73,12 +132,9 @@ export default function PaperTradingWorkspace() {
 
   const [activeWatchlistId, setActiveWatchlistId] = useStickyState(
     'algoteen-paper-watchlist',
-    WATCHLISTS[0].id
+    firstListId
   );
-  const [selectedSymbol, setSelectedSymbol] = useStickyState(
-    'algoteen-paper-symbol',
-    WATCHLISTS[0].symbols[0].symbol
-  );
+  const [selectedSymbol, setSelectedSymbol] = useStickyState('algoteen-paper-symbol', firstSymbol);
   const [timeframe, setTimeframe] = useStickyState('algoteen-paper-timeframe', '1D');
   const [lastAction, setLastAction] = useStickyState('algoteen-paper-last-action', null);
   const [watchQuery, setWatchQuery] = useState('');
@@ -132,11 +188,23 @@ export default function PaperTradingWorkspace() {
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
+  const [watchlistSnapshots, setWatchlistSnapshots] = useState({});
+  const [watchlistStatus, setWatchlistStatus] = useState({ loading: false, error: null, lastUpdated: null });
+
+  const watchlistRequestRef = useRef(0);
+  const mountedRef = useRef(true);
 
   const watchlistRef = useRef(null);
   const chartRef = useRef(null);
   const ticketRef = useRef(null);
   const positionsRef = useRef(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const loadAccount = useCallback(async () => {
     if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
@@ -398,9 +466,210 @@ export default function PaperTradingWorkspace() {
   );
 
   const getSymbolPrice = useCallback(
-    (symbol) => livePrices[symbol] ?? getSymbolMeta(symbol)?.price ?? 0,
-    [getSymbolMeta, livePrices]
+    (symbol) => {
+      if (!symbol) {
+        return 0;
+      }
+      const live = livePrices[symbol];
+      if (Number.isFinite(live)) {
+        return live;
+      }
+      const snapshot = watchlistSnapshots[symbol];
+      if (snapshot && Number.isFinite(snapshot.price)) {
+        return snapshot.price;
+      }
+      const meta = getSymbolMeta(symbol);
+      if (meta && Number.isFinite(meta.price)) {
+        return meta.price;
+      }
+      return 0;
+    },
+    [getSymbolMeta, livePrices, watchlistSnapshots]
   );
+
+  const refreshWatchlistData = useCallback(async () => {
+    const uniqueMap = new Map();
+    flattenSymbols.forEach((item) => {
+      if (!item?.symbol) {
+        return;
+      }
+      const assetClass = (item.assetClass ?? 'stocks').toLowerCase();
+      const key = `${assetClass}|${item.symbol}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, { symbol: item.symbol, assetClass });
+      }
+    });
+
+    const symbolsToFetch = Array.from(uniqueMap.values());
+    if (!symbolsToFetch.length) {
+      if (!mountedRef.current) {
+        return;
+      }
+      setWatchlistSnapshots({});
+      setWatchlistStatus((prev) => ({ ...prev, loading: false, error: null }));
+      return;
+    }
+
+    const requestId = watchlistRequestRef.current + 1;
+    watchlistRequestRef.current = requestId;
+
+    setWatchlistStatus((prev) => ({ ...prev, loading: true, error: null }));
+
+    const now = new Date();
+    const end = now.toISOString().slice(0, 10);
+    const start = new Date(now);
+    start.setDate(start.getDate() - 10);
+    const startDate = start.toISOString().slice(0, 10);
+
+    const tasks = symbolsToFetch.map(async (meta) => {
+      const params = new URLSearchParams({
+        assetClass: meta.assetClass,
+        symbol: meta.symbol,
+        timeframe: meta.assetClass === 'crypto' ? '1Hour' : '1Day',
+        start: startDate,
+        end,
+        limit: '120'
+      });
+
+      let payload = null;
+      let response;
+      try {
+        response = await fetch(`/api/market-data?${params.toString()}`, { cache: 'no-store' });
+      } catch (error) {
+        throw new Error('Unable to reach Polygon market data.');
+      }
+
+      try {
+        payload = await response.json();
+      } catch (error) {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        const message = payload?.error ?? `Polygon request failed (status ${response.status}).`;
+        throw new Error(message);
+      }
+
+      if (!payload) {
+        throw new Error('Failed to parse Polygon response.');
+      }
+
+      const bars = Array.isArray(payload?.bars) ? payload.bars : [];
+      if (!bars.length) {
+        throw new Error('No Polygon data available.');
+      }
+
+      const normalized = bars
+        .map((bar) => ({
+          close: Number.parseFloat(bar.close ?? bar.c ?? 0) || 0,
+          open: Number.parseFloat(bar.open ?? bar.o ?? 0) || 0,
+          volume: Number.parseFloat(bar.volume ?? bar.v ?? 0) || 0
+        }))
+        .filter(
+          (bar) =>
+            Number.isFinite(bar.close) &&
+            Number.isFinite(bar.open) &&
+            Number.isFinite(bar.volume)
+        );
+
+      const last = normalized[normalized.length - 1];
+      if (!last) {
+        throw new Error('No Polygon data available.');
+      }
+      const previous = normalized.length > 1 ? normalized[normalized.length - 2] : null;
+      const previousClose = previous?.close ?? last.open ?? last.close;
+      const price = last.close;
+      const changePct = previousClose ? ((price - previousClose) / previousClose) * 100 : 0;
+
+      return {
+        symbol: meta.symbol,
+        assetClass: meta.assetClass,
+        price,
+        changePct,
+        volume: last.volume,
+        updatedAt: Date.now()
+      };
+    });
+
+    const results = await Promise.allSettled(tasks);
+
+    if (!mountedRef.current || watchlistRequestRef.current !== requestId) {
+      return;
+    }
+
+    const updates = {};
+    const errors = [];
+
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        updates[result.value.symbol] = result.value;
+      } else {
+        errors.push(result.reason?.message ?? 'Unknown Polygon error.');
+      }
+    });
+
+    if (Object.keys(updates).length) {
+      setWatchlistSnapshots((prev) => {
+        const next = {};
+        symbolsToFetch.forEach((meta) => {
+          const update = updates[meta.symbol];
+          if (update) {
+            next[meta.symbol] = {
+              price: update.price,
+              changePct: update.changePct,
+              volume: update.volume,
+              assetClass: update.assetClass,
+              updatedAt: update.updatedAt
+            };
+          } else if (prev[meta.symbol]) {
+            next[meta.symbol] = prev[meta.symbol];
+          }
+        });
+        return next;
+      });
+
+      setLivePrices((prev) => {
+        const next = { ...prev };
+        Object.values(updates).forEach((data) => {
+          if (Number.isFinite(data.price)) {
+            next[data.symbol] = data.price;
+          }
+        });
+        return next;
+      });
+    } else {
+      setWatchlistSnapshots((prev) => {
+        const next = {};
+        symbolsToFetch.forEach((meta) => {
+          if (prev[meta.symbol]) {
+            next[meta.symbol] = prev[meta.symbol];
+          }
+        });
+        return next;
+      });
+    }
+
+    setWatchlistStatus((prev) => ({
+      loading: false,
+      error:
+        errors.length === 0
+          ? null
+          : errors.length === symbolsToFetch.length
+            ? 'Unable to refresh Polygon market data right now.'
+            : 'Some symbols failed to refresh from Polygon.',
+      lastUpdated: Object.keys(updates).length ? Date.now() : prev.lastUpdated
+    }));
+  }, [flattenSymbols]);
+
+  useEffect(() => {
+    refreshWatchlistData();
+    const interval = window.setInterval(() => {
+      refreshWatchlistData();
+    }, 45_000);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [refreshWatchlistData]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated' || !alpacaStatus.connected) {
@@ -482,39 +751,79 @@ export default function PaperTradingWorkspace() {
         const preset = TIMEFRAME_PRESETS.find((option) => option.id === timeframe);
         const timeframeParam = preset?.timeframe ?? '1Day';
         const limitParam = preset?.limit ?? 300;
-        const symbolParam = formatSymbolForAlpaca(selectedSymbol, derivedAssetClass);
+        const lookbackDays = preset?.lookbackDays ?? 120;
         const params = new URLSearchParams({
-          symbol: symbolParam,
+          symbol: selectedSymbol,
           timeframe: timeframeParam,
           limit: String(limitParam),
           assetClass: derivedAssetClass
         });
-        const response = await fetch(`/api/alpaca/bars?${params.toString()}`, {
-          cache: 'no-store',
-          credentials: 'include'
-        });
+        const now = new Date();
+        const start = new Date(now);
+        start.setDate(start.getDate() - lookbackDays);
+        params.set('start', start.toISOString().slice(0, 10));
+        params.set('end', now.toISOString().slice(0, 10));
+
+        const response = await fetch(`/api/market-data?${params.toString()}`, { cache: 'no-store' });
         if (!active) return;
+
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (error) {
+          payload = null;
+        }
+
         if (!response.ok) {
+          const message = payload?.error ?? 'Unable to load Polygon market data right now.';
           setChartSeries([]);
-          setChartError('Unable to load Alpaca market data right now.');
+          setChartError(message);
           return;
         }
-        const payload = await response.json();
-        const bars = Array.isArray(payload?.data?.bars) ? payload.data.bars : [];
+
+        if (!payload) {
+          setChartSeries([]);
+          setChartError('Unable to parse Polygon market data response.');
+          return;
+        }
+
+        const bars = Array.isArray(payload?.bars) ? payload.bars : [];
         if (!bars.length) {
           setChartSeries([]);
-          setChartError('No Alpaca data available for this selection.');
+          setChartError('No Polygon data available for this selection.');
           return;
         }
-        const transformed = bars.map((bar, index) => ({
-          index: bar.index ?? index,
-          open: Number.parseFloat(bar.open ?? bar.o ?? 0) || 0,
-          high: Number.parseFloat(bar.high ?? bar.h ?? 0) || 0,
-          low: Number.parseFloat(bar.low ?? bar.l ?? 0) || 0,
-          close: Number.parseFloat(bar.close ?? bar.c ?? 0) || 0,
-          volume: Number.parseFloat(bar.volume ?? bar.v ?? 0) || 0,
-          time: bar.t ? Date.parse(bar.t) || index : index
-        }));
+        const transformed = bars
+          .map((bar, index) => {
+            const open = Number.parseFloat(bar.open ?? bar.o ?? 0) || 0;
+            const high = Number.parseFloat(bar.high ?? bar.h ?? 0) || 0;
+            const low = Number.parseFloat(bar.low ?? bar.l ?? 0) || 0;
+            const close = Number.parseFloat(bar.close ?? bar.c ?? 0) || 0;
+            const volume = Number.parseFloat(bar.volume ?? bar.v ?? 0) || 0;
+            const rawTime =
+              bar.t != null
+                ? Number.parseInt(bar.t, 10)
+                : bar.date
+                  ? Date.parse(bar.date)
+                  : null;
+            return {
+              index: index,
+              open,
+              high,
+              low,
+              close,
+              volume,
+              time: Number.isFinite(rawTime) ? rawTime : index
+            };
+          })
+          .filter(
+            (bar) =>
+              Number.isFinite(bar.open) &&
+              Number.isFinite(bar.high) &&
+              Number.isFinite(bar.low) &&
+              Number.isFinite(bar.close) &&
+              Number.isFinite(bar.volume)
+          );
         setChartSeries(transformed);
         if (transformed.length) {
           const lastClose = transformed[transformed.length - 1].close;
@@ -524,7 +833,7 @@ export default function PaperTradingWorkspace() {
       } catch (error) {
         if (!active) return;
         setChartSeries([]);
-        setChartError('Unable to load Alpaca market data right now.');
+        setChartError('Unable to load Polygon market data right now.');
       } finally {
         if (active) {
           setChartLoading(false);
@@ -580,15 +889,36 @@ export default function PaperTradingWorkspace() {
 
   const filteredWatchlists = useMemo(() => {
     const term = watchQuery.trim().toLowerCase();
-    const baseLists = watchlists.map((list) => ({
-      ...list,
-      symbols: term
+    const applyMetrics = (symbol) => {
+      const metrics = watchlistSnapshots[symbol.symbol];
+      const live = livePrices[symbol.symbol];
+      const price = Number.isFinite(metrics?.price)
+        ? metrics.price
+        : Number.isFinite(live)
+          ? live
+          : 0;
+      const changePct = Number.isFinite(metrics?.changePct) ? metrics.changePct : 0;
+      const volume = Number.isFinite(metrics?.volume) ? metrics.volume : 0;
+      return {
+        ...symbol,
+        price,
+        changePct,
+        volume
+      };
+    };
+
+    const baseLists = watchlists.map((list) => {
+      const symbols = term
         ? list.symbols.filter((symbol) => {
             const haystack = `${symbol.symbol} ${symbol.name}`.toLowerCase();
             return haystack.includes(term);
           })
-        : list.symbols
-    }));
+        : list.symbols;
+      return {
+        ...list,
+        symbols: symbols.map(applyMetrics)
+      };
+    });
 
     if (!term) {
       return baseLists;
@@ -603,19 +933,33 @@ export default function PaperTradingWorkspace() {
       name: 'Alpaca matches',
       description: 'Symbols returned by your live Alpaca search.',
       assetClass: 'stocks',
-      symbols: searchResults.map((asset) => ({
-        symbol: asset.symbol,
-        name: asset.name ?? asset.symbol,
-        sector: asset.exchange ?? 'Asset',
-        price: livePrices[asset.symbol] ?? 0,
-        changePct: 0,
-        volume: Number.parseFloat(asset.min_order_size ?? 0) || 0,
-        assetClass: 'stocks'
-      }))
+      symbols: searchResults.map((asset) => {
+        const lookup = normalizeSymbolForAssetClass(asset.symbol ?? '', 'stocks');
+        const metrics = watchlistSnapshots[lookup];
+        const live = livePrices[lookup];
+        const price = Number.isFinite(metrics?.price)
+          ? metrics.price
+          : Number.isFinite(live)
+            ? live
+            : 0;
+        const changePct = Number.isFinite(metrics?.changePct) ? metrics.changePct : 0;
+        const volume = Number.isFinite(metrics?.volume)
+          ? metrics.volume
+          : Number.parseFloat(asset.min_order_size ?? 0) || 0;
+        return {
+          symbol: lookup || asset.symbol,
+          name: asset.name ?? asset.symbol,
+          sector: asset.exchange ?? 'Asset',
+          price,
+          changePct,
+          volume,
+          assetClass: 'stocks'
+        };
+      })
     };
 
     return [searchList, ...baseLists];
-  }, [livePrices, searchResults, watchQuery, watchlists]);
+  }, [livePrices, searchResults, watchQuery, watchlistSnapshots, watchlists]);
 
   const marketStatus = useMemo(() => {
     if (!clock) {
@@ -746,14 +1090,16 @@ export default function PaperTradingWorkspace() {
       return;
     }
 
-    const tickerInput = window.prompt('Enter symbol ticker (e.g. AMZN)');
+    const inferredClass = targetList.assetClass ?? 'stocks';
+    const tickerInput = window.prompt('Enter symbol ticker (e.g. AMZN or BTC/USD)');
     if (!tickerInput) return;
-    const ticker = tickerInput.trim().toUpperCase();
-    if (!ticker) return;
+    const normalizedTicker = normalizeSymbolForAssetClass(tickerInput, inferredClass);
+    if (!normalizedTicker) {
+      pushToast({ title: 'Invalid symbol', message: 'Enter a valid ticker before adding it to your watchlist.' });
+      return;
+    }
 
-    const nameInput = window.prompt('Asset name', ticker) || ticker;
-    const priceInput = Number.parseFloat(window.prompt('Starting price', '100'));
-    const price = Number.isFinite(priceInput) && priceInput > 0 ? priceInput : 100;
+    const nameInput = window.prompt('Asset name', normalizedTicker) || normalizedTicker;
 
     let added = false;
     setWatchlists((prev) =>
@@ -762,15 +1108,14 @@ export default function PaperTradingWorkspace() {
         if (list.id !== activeWatchlistId) {
           return { ...list, symbols: clonedSymbols };
         }
-        if (clonedSymbols.some((symbol) => symbol.symbol === ticker)) {
+        if (clonedSymbols.some((symbol) => symbol.symbol === normalizedTicker)) {
           return { ...list, symbols: clonedSymbols };
         }
         added = true;
-        const inferredClass = list.assetClass ?? 'stocks';
         return {
           ...list,
           symbols: [
-            { symbol: ticker, name: nameInput, sector: 'Custom', price, changePct: 0, volume: 0, assetClass: inferredClass },
+            { symbol: normalizedTicker, name: nameInput, sector: 'Custom', assetClass: inferredClass },
             ...clonedSymbols
           ]
         };
@@ -778,13 +1123,22 @@ export default function PaperTradingWorkspace() {
     );
 
     if (added) {
-      setSelectedSymbol(ticker);
+      setSelectedSymbol(normalizedTicker);
       setWatchQuery('');
-      pushToast({ title: 'Symbol added', message: `${ticker} pinned to ${targetList.name}.` });
+      refreshWatchlistData();
+      pushToast({ title: 'Symbol added', message: `${normalizedTicker} pinned to ${targetList.name}.` });
     } else {
-      pushToast({ title: 'Already watching', message: `${ticker} is already in this list.` });
+      pushToast({ title: 'Already watching', message: `${normalizedTicker} is already in this list.` });
     }
-  }, [activeWatchlistId, pushToast, setSelectedSymbol, setWatchQuery, setWatchlists, watchlists]);
+  }, [
+    activeWatchlistId,
+    pushToast,
+    refreshWatchlistData,
+    setSelectedSymbol,
+    setWatchQuery,
+    setWatchlists,
+    watchlists
+  ]);
 
   const handleGuidedTrade = useCallback(() => {
     const entry = roundTo(getSymbolPrice(selectedSymbol), 2);
@@ -1190,6 +1544,7 @@ export default function PaperTradingWorkspace() {
           searchQuery={watchQuery}
           onSearchChange={setWatchQuery}
           onAddSymbol={handleAddSymbol}
+          status={watchlistStatus}
         />
 
         <main className="flex min-w-0 flex-1 justify-center px-6 py-6">

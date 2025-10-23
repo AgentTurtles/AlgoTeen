@@ -1,15 +1,15 @@
-export const WATCHLISTS = [
+export const WATCHLIST_PRESETS = [
   {
     id: 'core',
     name: 'Core watch',
     description: 'Liquid names teens actually follow.',
     assetClass: 'stocks',
     symbols: [
-      { symbol: 'AAPL', name: 'Apple Inc.', sector: 'Tech', price: 189.24, changePct: 0.68, volume: 81234567, assetClass: 'stocks' },
-      { symbol: 'TSLA', name: 'Tesla', sector: 'EV', price: 218.46, changePct: -1.12, volume: 46234578, assetClass: 'stocks' },
-      { symbol: 'NVDA', name: 'NVIDIA', sector: 'AI', price: 914.34, changePct: 2.14, volume: 25324567, assetClass: 'stocks' },
-      { symbol: 'MSFT', name: 'Microsoft', sector: 'Software', price: 412.19, changePct: 0.36, volume: 34587123, assetClass: 'stocks' },
-      { symbol: 'SPY', name: 'S&P 500 ETF', sector: 'ETF', price: 552.61, changePct: 0.41, volume: 76212345, assetClass: 'stocks' }
+      { symbol: 'AAPL', name: 'Apple Inc.', sector: 'Tech', assetClass: 'stocks' },
+      { symbol: 'TSLA', name: 'Tesla', sector: 'EV', assetClass: 'stocks' },
+      { symbol: 'NVDA', name: 'NVIDIA', sector: 'AI', assetClass: 'stocks' },
+      { symbol: 'MSFT', name: 'Microsoft', sector: 'Software', assetClass: 'stocks' },
+      { symbol: 'SPY', name: 'S&P 500 ETF', sector: 'ETF', assetClass: 'stocks' }
     ]
   },
   {
@@ -18,9 +18,9 @@ export const WATCHLISTS = [
     description: 'High-volatility pairs for smaller accounts.',
     assetClass: 'crypto',
     symbols: [
-      { symbol: 'BTCUSD', name: 'Bitcoin', sector: 'Crypto', price: 64251, changePct: 1.02, volume: 489123, assetClass: 'crypto' },
-      { symbol: 'ETHUSD', name: 'Ethereum', sector: 'Crypto', price: 3411, changePct: -0.48, volume: 329012, assetClass: 'crypto' },
-      { symbol: 'SOLUSD', name: 'Solana', sector: 'Crypto', price: 146, changePct: 3.58, volume: 778901, assetClass: 'crypto' }
+      { symbol: 'BTC/USD', name: 'Bitcoin', sector: 'Crypto', assetClass: 'crypto' },
+      { symbol: 'ETH/USD', name: 'Ethereum', sector: 'Crypto', assetClass: 'crypto' },
+      { symbol: 'SOL/USD', name: 'Solana', sector: 'Crypto', assetClass: 'crypto' }
     ]
   }
 ];
