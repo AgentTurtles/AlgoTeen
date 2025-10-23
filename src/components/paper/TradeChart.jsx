@@ -32,268 +32,133 @@ export default function TradeChart({
   const [useFallback, setUseFallback] = useState(false);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return undefined;
 
-    let mounted = true;
-    let retryTimeout = null;
+    let chartInstance = null;
+    let resizeObserver = null;
 
-  const buildChart = async () => {
+    const handleResize = () => {
+      if (!containerRef.current || !chartRef.current) return;
+      const { width, height } = containerRef.current.getBoundingClientRect();
+      chartRef.current.applyOptions({
+        width: Math.max(0, Math.floor(width)),
+        height: Math.max(0, Math.floor(height))
+      });
+    };
+
+    const cleanup = () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeObserver) {
+        try {
+          resizeObserver.disconnect();
+        } catch (e) {}
+        resizeObserver = null;
+      }
+      if (chartInstance && typeof chartInstance.remove === 'function') {
+        try {
+          chartInstance.remove();
+        } catch (e) {}
+      }
+      chartInstance = null;
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+      smaSeriesRef.current = null;
+      vwapSeriesRef.current = null;
+      priceLinesRef.current = [];
+    };
+
+    try {
+      container.innerHTML = '';
+    } catch (e) {}
+
+    try {
+      chartInstance = createChart(container, {
+        layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
+        rightPriceScale: { visible: true },
+        timeScale: { timeVisible: true, rightOffset: 12 },
+        crosshair: { mode: CrosshairMode.Normal }
+      });
+    } catch (error) {
+      console.error('TradeChart: error creating chart', error);
+      setDebugInfo({ error: 'createChart', message: error?.message ?? String(error) });
+      setUseFallback(true);
+      cleanup();
+      return cleanup;
+    }
+
+    if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
+      console.error('TradeChart: createChart did not return a valid chart API. Received:', chartInstance);
+      setDebugInfo({ error: 'invalidChartApi' });
+      setUseFallback(true);
+      cleanup();
+      return cleanup;
+    }
+
+    chartRef.current = chartInstance;
+
+    try {
+      candleSeriesRef.current = chartInstance.addCandlestickSeries({
+        upColor: '#0F9D58',
+        borderUpColor: '#0F9D58',
+        wickUpColor: '#0F9D58',
+        downColor: '#DC2626',
+        borderDownColor: '#DC2626',
+        wickDownColor: '#DC2626'
+      });
+    } catch (error) {
+      console.error('TradeChart: failed to create candlestick series', error);
+      setDebugInfo({ error: 'candlestickSeries', message: error?.message ?? String(error) });
+      setUseFallback(true);
+      cleanup();
+      return cleanup;
+    }
+
+    try {
+      volumeSeriesRef.current = chartInstance.addHistogramSeries({
+        scaleMargins: { top: 0.8, bottom: 0 },
+        priceFormat: { type: 'volume' },
+        color: '#8b98c9',
+        priceLineVisible: false
+      });
+    } catch (error) {
+      console.error('TradeChart: failed to create volume series', error);
+      volumeSeriesRef.current = null;
+    }
+
+    try {
+      smaSeriesRef.current = chartInstance.addLineSeries({
+        color: '#1D4ED8',
+        lineWidth: 2
+      });
+    } catch (error) {
+      smaSeriesRef.current = null;
+    }
+
+    try {
+      vwapSeriesRef.current = chartInstance.addLineSeries({
+        color: '#0F766E',
+        lineWidth: 2
+      });
+    } catch (error) {
+      vwapSeriesRef.current = null;
+    }
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    if (typeof ResizeObserver !== 'undefined') {
       try {
-
-        // if this container was already initialized (dataset flag), skip creating another chart
-        try {
-          if (containerRef.current && containerRef.current.dataset && containerRef.current.dataset._chartInit === '1') {
-            // eslint-disable-next-line no-console
-            console.debug('TradeChart: container already initialized via dataset flag; skipping create.');
-            return () => {};
-          }
-        } catch (e) {}
-
-        // defensive: remove any existing children (avoid duplicate canvases) before creating
-        try {
-          if (containerRef.current && containerRef.current.firstChild) {
-            while (containerRef.current.firstChild) {
-              containerRef.current.removeChild(containerRef.current.firstChild);
-            }
-          }
-        } catch (e) {
-          // ignore DOM cleanup errors
-        }
-
-  // wait for next animation frame so container is definitely in the DOM/layout
-  await new Promise((resolve) => requestAnimationFrame(resolve));
-
-  // runtime import to avoid bundler interop issues
-  // import the package entry and detect API shape at runtime
-  const module = await import('lightweight-charts').catch(() => null);
-        // resolve createChart function across different module shapes
-        const createChartFn = module.createChart ?? (module.default && (module.default.createChart ?? (typeof module.default === 'function' ? module.default : undefined)));
-        const crosshairEnum = module.CrosshairMode ?? (module.default && module.default.CrosshairMode) ?? CrosshairMode;
-        // debug info to help diagnose wrong returns from createChart
-        try {
-          // eslint-disable-next-line no-console
-          console.debug('TradeChart: resolved createChart type', typeof createChartFn);
-          // eslint-disable-next-line no-console
-          console.debug('TradeChart: container element', containerRef.current && containerRef.current.nodeName);
-        } catch (e) {}
-
-        if (typeof createChartFn !== 'function') {
-          console.error('TradeChart: unable to resolve createChart function from lightweight-charts module', module);
-          return null;
-        }
-
-        let chart = createChartFn(containerRef.current, {
-          layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
-          rightPriceScale: { visible: true },
-          timeScale: { timeVisible: true, rightOffset: 12 },
-          crosshair: { mode: crosshairEnum ? crosshairEnum.Normal : CrosshairMode.Normal }
-        });
-
-        // Debug the returned chart object shape
-        try {
-          // eslint-disable-next-line no-console
-          console.debug('TradeChart: created chart', chart);
-          // eslint-disable-next-line no-console
-          console.debug('TradeChart: chart keys', chart && Object.keys(chart));
-          // eslint-disable-next-line no-console
-          console.debug('TradeChart: chart proto keys', chart && Object.getOwnPropertyNames(Object.getPrototypeOf(chart || {})));
-        } catch (e) {}
-
-        // Validate that the chart API looks correct before using it
-        const findApiOnPrototypeChain = (obj) => {
-          try {
-            if (!obj) return null;
-            if (typeof obj.addCandlestickSeries === 'function') return obj;
-            let proto = Object.getPrototypeOf(obj);
-            const visited = new Set();
-            while (proto && proto !== Object.prototype && !visited.has(proto)) {
-              visited.add(proto);
-              try {
-                if (typeof proto.addCandlestickSeries === 'function') return obj;
-                const names = Object.getOwnPropertyNames(proto || {});
-                if (names.includes('addCandlestickSeries')) return obj;
-              } catch (e) {}
-              proto = Object.getPrototypeOf(proto);
-            }
-          } catch (e) {}
-          return null;
-        };
-
-        if (!findApiOnPrototypeChain(chart)) {
-          try {
-            // eslint-disable-next-line no-console
-            console.error('TradeChart: createChart did not return a valid chart API. Received:', chart);
-            // eslint-disable-next-line no-console
-            console.error('TradeChart: container child count', containerRef.current ? containerRef.current.childNodes.length : 0);
-            // eslint-disable-next-line no-console
-            console.error('TradeChart: container html snippet', containerRef.current ? containerRef.current.innerHTML.slice(0, 300) : '');
-
-            // Try to locate a chart API attached to the DOM tree (some runtimes attach the API as a property)
-            const findChartApiOnNode = (node, depth = 0, maxDepth = 3, visited = new Set()) => {
-              if (!node || depth > maxDepth) return null;
-              if (visited.has(node)) return null;
-              visited.add(node);
-              try {
-                // check a few likely property names first
-                const candidateNames = ['_chart', '__chart', 'chart', '_lightweightChart', '_tv_chart', 'tvChart'];
-                for (const name of candidateNames) {
-                  try {
-                    const v = node[name];
-                    if (v && typeof v.addCandlestickSeries === 'function') return v;
-                  } catch (e) {}
-                }
-
-                // inspect own property values (safe-guarded)
-                const props = Object.getOwnPropertyNames(node || {});
-                for (const p of props) {
-                  try {
-                    const val = node[p];
-                    if (val && typeof val.addCandlestickSeries === 'function') return val;
-                  } catch (e) {}
-                }
-              } catch (e) {}
-
-              // traverse children
-              try {
-                if (node.childNodes && node.childNodes.length) {
-                  for (let i = 0; i < node.childNodes.length; i += 1) {
-                    try {
-                      const found = findChartApiOnNode(node.childNodes[i], depth + 1, maxDepth, visited);
-                      if (found) return found;
-                    } catch (e) {}
-                  }
-                }
-              } catch (e) {}
-              return null;
-            };
-
-            let discovered = null;
-            try {
-              discovered = findChartApiOnNode(containerRef.current, 0, 4);
-            } catch (e) { discovered = null; }
-
-            if (discovered) {
-              // eslint-disable-next-line no-console
-              console.debug('TradeChart: discovered chart API on DOM via search', discovered);
-              chart = discovered;
-            } else {
-              try {
-                setDebugInfo({
-                  error: 'createChartInvalid',
-                  received: chart && typeof chart === 'object' ? Object.keys(chart) : String(chart),
-                  containerChildren: containerRef.current ? containerRef.current.childNodes.length : 0,
-                  containerHtmlSnippet: containerRef.current ? containerRef.current.innerHTML.slice(0, 300) : ''
-                });
-              } catch (e) {}
-              try { setUseFallback(true); } catch (e) {}
-              return null;
-            }
-          } catch (e) {
-            // if anything goes wrong during discovery, fall back
-            try { setUseFallback(true); } catch (err) {}
-            return null;
-          }
-  }
-
-    // mark container as initialized so subsequent mounts don't recreate
-    try { if (containerRef.current && containerRef.current.dataset) containerRef.current.dataset._chartInit = '1'; } catch (e) {}
-
-  // assign the chart API to the ref
-        chartRef.current = chart;
-
-        // Create series defensively — some runtimes may throw during series creation
-        try {
-          candleSeriesRef.current = chart.addCandlestickSeries({
-          upColor: '#0F9D58',
-          borderUpColor: '#0F9D58',
-          wickUpColor: '#0F9D58',
-          downColor: '#DC2626',
-          borderDownColor: '#DC2626',
-          wickDownColor: '#DC2626'
-          });
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.error('TradeChart: failed to create candlestick series', e);
-          try { setUseFallback(true); } catch (err) {}
-          return null;
-        }
-
-        try {
-          volumeSeriesRef.current = chart.addHistogramSeries({
-          scaleMargins: { top: 0.8, bottom: 0 },
-          priceFormat: { type: 'volume' },
-          color: '#8b98c9',
-          priceLineVisible: false
-          });
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.error('TradeChart: failed to create volume series', e);
-        }
-
-        try {
-          smaSeriesRef.current = chart.addLineSeries({
-          color: '#1D4ED8',
-          lineWidth: 2
-          });
-        } catch (e) {
-          // ignore
-        }
-        try {
-          vwapSeriesRef.current = chart.addLineSeries({
-          color: '#0F766E',
-          lineWidth: 2
-          });
-        } catch (e) {
-          // ignore
-        }
-
-        const handleResize = () => chartRef.current && chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
-        window.addEventListener('resize', handleResize);
-        handleResize();
-
-        try {
-          setDebugInfo({ initialized: true });
-        } catch (e) {}
-
-        return () => {
-          window.removeEventListener('resize', handleResize);
-          if (chartRef.current) {
-            try { chartRef.current.remove(); } catch (e) {}
-            chartRef.current = null;
-          }
-          try { if (containerRef.current && containerRef.current.dataset) delete containerRef.current.dataset._chartInit; } catch (e) {}
-        };
-      } catch (err) {
-        console.error('TradeChart: error creating chart', err);
-        return null;
+        resizeObserver = new ResizeObserver(() => handleResize());
+        resizeObserver.observe(container);
+      } catch (e) {
+        resizeObserver = null;
       }
-    };
+    }
 
-    let cleanupFn = null;
+    setDebugInfo({ initialized: true });
 
-    (async () => {
-      // First attempt
-      cleanupFn = await buildChart();
-
-      // If the first attempt didn't produce a valid chart, retry once on next tick
-      if (!cleanupFn) {
-        retryTimeout = window.setTimeout(async () => {
-          if (!mounted) return;
-          cleanupFn = await buildChart();
-          if (!cleanupFn) {
-            console.error('TradeChart: failed to initialize chart after retry. Chart features will be disabled.');
-          }
-        }, 0);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-      if (retryTimeout) {
-        window.clearTimeout(retryTimeout);
-      }
-      if (typeof cleanupFn === 'function') cleanupFn();
-    };
+    return cleanup;
   }, []);
 
   // small on-page debug area when developer appends ?chartdebug=1 to URL
@@ -330,19 +195,23 @@ export default function TradeChart({
       value: d.volume,
       color: d.close >= d.open ? '#0F9D58' : '#DC2626'
     }));
-    volumeSeriesRef.current.setData(volumes);
+    if (volumeSeriesRef.current) {
+      volumeSeriesRef.current.setData(volumes);
+    }
 
     // price lines are managed in a separate effect (markers/activeSide)
 
-    if (overlays.sma) {
-      const sma = computeSMA(data, 20).map((p) => ({ time: Math.floor(p.index ? p.index : 0), value: p.value }));
-      smaSeriesRef.current.setData(
-        sma.map((p, i) => ({ time: candles[i]?.time ?? i, value: p.value }))
-      );
-      smaSeriesRef.current.applyOptions({ visible: true });
-    } else {
-      smaSeriesRef.current.setData([]);
-      smaSeriesRef.current.applyOptions({ visible: false });
+    if (smaSeriesRef.current) {
+      if (overlays.sma) {
+        const sma = computeSMA(data, 20).map((p) => ({ time: Math.floor(p.index ? p.index : 0), value: p.value }));
+        smaSeriesRef.current.setData(
+          sma.map((p, i) => ({ time: candles[i]?.time ?? i, value: p.value }))
+        );
+        smaSeriesRef.current.applyOptions({ visible: true });
+      } else {
+        smaSeriesRef.current.setData([]);
+        smaSeriesRef.current.applyOptions({ visible: false });
+      }
     }
 
     // VWAP overlay (running VWAP across data)
@@ -375,7 +244,7 @@ export default function TradeChart({
 
     chart.subscribeClick(handleClick);
     return () => chart.unsubscribeClick(handleClick);
-  }, [onChartClick]);
+  }, [onChartClick, useFallback]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -386,7 +255,7 @@ export default function TradeChart({
     };
     el.addEventListener('dblclick', handler);
     return () => el.removeEventListener('dblclick', handler);
-  }, [data, onChartDoubleClick]);
+  }, [data, onChartDoubleClick, useFallback]);
 
 
   // Manage price line markers (entry/stop/target)
