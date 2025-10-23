@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { computeRSI, computeSMA, formatNumber, roundTo } from './utils';
@@ -57,6 +59,7 @@ export default function TradeChart({
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const resizeObserverRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [crosshair, setCrosshair] = useState(null);
   const [dragging, setDragging] = useState(null);
@@ -71,15 +74,35 @@ export default function TradeChart({
     return { start, length: baseLength };
   });
   useEffect(() => {
-    const handleResize = () => {
+    const node = containerRef.current;
+    if (!node) return undefined;
+
+    const update = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      setDimensions({ width: rect.width, height: rect.height });
+      const width = Math.max(0, Math.floor(rect.width));
+      const height = Math.max(0, Math.floor(rect.height));
+      setDimensions((prev) => {
+        if (prev.width === width && prev.height === height) {
+          return prev;
+        }
+        return { width, height };
+      });
     };
 
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    update();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserverRef.current = new ResizeObserver(() => update());
+      resizeObserverRef.current.observe(node);
+      return () => {
+        resizeObserverRef.current?.disconnect();
+        resizeObserverRef.current = null;
+      };
+    }
+
+    const handle = window.setInterval(update, 200);
+    return () => window.clearInterval(handle);
   }, []);
 
   useEffect(() => {
@@ -164,9 +187,26 @@ export default function TradeChart({
     if (!width || !height) return;
 
     const ctx = canvas.getContext('2d');
-    canvas.width = width;
-    canvas.height = height;
+    if (!ctx) {
+      return;
+    }
 
+    const pixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    const adjustedWidth = Math.max(1, Math.floor(width * pixelRatio));
+    const adjustedHeight = Math.max(1, Math.floor(height * pixelRatio));
+
+    if (canvas.width !== adjustedWidth || canvas.height !== adjustedHeight) {
+      canvas.width = adjustedWidth;
+      canvas.height = adjustedHeight;
+    }
+    if (canvas.style.width !== `${width}px`) {
+      canvas.style.width = `${width}px`;
+    }
+    if (canvas.style.height !== `${height}px`) {
+      canvas.style.height = `${height}px`;
+    }
+
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
     if (!visibleData.length) {
