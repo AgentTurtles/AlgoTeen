@@ -13,16 +13,16 @@ const NAV_ITEMS = [
 
 export default async function PaperTradingPage() {
   const session = await getServerSession(authOptions);
-  if (!session) {
-    redirect(`/auth/signup?callbackUrl=${encodeURIComponent('/paper-trading')}`);
-  }
+  // Allow unauthenticated access to the paper-trading page.
+  // Components inside the workspace will handle sign-in prompts or soft-gating client-side.
+  const sessionSafe = session || null;
 
   return (
     <div className="min-h-screen bg-[#F5F7F5]">
       <GlobalStyles />
       <SiteHeader navItems={NAV_ITEMS} searchItems={SITE_SEARCH_INDEX} />
       <main id="desk" className="mt-16">
-        <PaperTradingWorkspace />
+        <PaperTradingWorkspace session={sessionSafe} />
       </main>
       <SiteFooter />
     </div>

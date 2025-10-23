@@ -6,9 +6,9 @@ import { authOptions } from '../../lib/auth';
 
 export default async function CodeLabPage() {
   const session = await getServerSession(authOptions);
-  if (!session) {
-    redirect(`/auth/signup?callbackUrl=${encodeURIComponent('/codelab')}`);
-  }
+  // Allow unauthenticated access to the CodeLab page.
+  // Client will show a mode selector and soft-gate features that require auth.
+  const sessionSafe = session || null;
 
-  return <CodeLabPageClient />;
+  return <CodeLabPageClient session={sessionSafe} />;
 }

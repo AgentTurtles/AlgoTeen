@@ -292,6 +292,13 @@ export default function GlobalStyles() {
           border-radius: clamp(34px, 4.6vw, 56px);
         }
 
+        /* Paper trading specific frame: allow wider max width without changing global 'section-wide' */
+        .section-frame.paper-frame {
+          margin-left: auto;
+          margin-right: auto;
+          width: min(100%, 1800px);
+        }
+
         .section-frame.section-mega .section-frame-content {
           padding: clamp(2.8rem, 6.5vw, 5.2rem);
         }

@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 
 const POLYGON_BASE = 'https://api.polygon.io/v2';
 
+// Simple in-memory cache keyed by query params. This is sufficient for dev
+// and short-lived server instances. Each entry contains { expires: ts, body }.
+const _cache = new Map();
+function cacheKey(assetClass, symbol, timeframe, start, end, limit) {
+  return `${assetClass}|${symbol}|${timeframe}|${start}|${end}|${limit}`;
+}
+
 const TIMEFRAME_CONFIG = {
   '1Day': { multiplier: 1, timespan: 'day', approxBarsPerDay: 1 },
   '4Hour': { multiplier: 4, timespan: 'hour', approxBarsPerDay: 6 },
@@ -13,12 +20,8 @@ const TIMEFRAME_CONFIG = {
 function normalizeSymbol(symbol, assetClass) {
   const trimmed = (symbol || '').trim().toUpperCase();
   if (!trimmed) {
-    if (assetClass === 'crypto') {
-      return 'BTC/USD';
-    }
-    if (assetClass === 'forex') {
-      return 'EUR/USD';
-    }
+    if (assetClass === 'crypto') return 'BTC/USD';
+    if (assetClass === 'forex') return 'EUR/USD';
     return 'SPY';
   }
 
@@ -27,9 +30,7 @@ function normalizeSymbol(symbol, assetClass) {
       const [base = '', quote = ''] = trimmed.split('/');
       const cleanedBase = base.replace(/[^A-Z0-9]/g, '');
       const cleanedQuote = quote.replace(/[^A-Z0-9]/g, '');
-      if (!cleanedBase || !cleanedQuote) {
-        return trimmed;
-      }
+      if (!cleanedBase || !cleanedQuote) return trimmed;
       return `${cleanedBase}/${cleanedQuote}`;
     }
     const alphanumeric = trimmed.replace(/[^A-Z0-9]/g, '');
@@ -46,12 +47,8 @@ function normalizeSymbol(symbol, assetClass) {
 
 function toPolygonSymbol(symbol, assetClass) {
   const normalized = normalizeSymbol(symbol, assetClass);
-  if (assetClass === 'crypto') {
-    return `X:${normalized.replace('/', '')}`;
-  }
-  if (assetClass === 'forex') {
-    return `C:${normalized.replace('/', '')}`;
-  }
+  if (assetClass === 'crypto') return `X:${normalized.replace('/', '')}`;
+  if (assetClass === 'forex') return `C:${normalized.replace('/', '')}`;
   return normalized;
 }
 
@@ -89,9 +86,7 @@ export async function GET(request) {
   if (rawEnd && Number.isNaN(endDate.getTime())) {
     return NextResponse.json({ error: 'Invalid end date format. Use YYYY-MM-DD.' }, { status: 400 });
   }
-  if (endDate > now) {
-    endDate = now;
-  }
+  if (endDate > now) endDate = now;
 
   const rawStart = searchParams.get('start');
   let startDate = rawStart ? new Date(rawStart) : null;
@@ -116,6 +111,14 @@ export async function GET(request) {
 
   const url = `${POLYGON_BASE}/aggs/ticker/${polygonSymbol}/range/${timeframeConfig.multiplier}/${timeframeConfig.timespan}/${from}/${to}?adjusted=true&sort=asc&limit=${limit}&apiKey=${polygonKey}`;
 
+  // Check cache first
+  const key = cacheKey(assetClass, normalizedSymbol, resolvedTimeframe, from, to, limit);
+  const nowTs = Date.now();
+  const cached = _cache.get(key);
+  if (cached && cached.expires > nowTs) {
+    return NextResponse.json(cached.body);
+  }
+
   let response;
   try {
     response = await fetch(url, { cache: 'no-store' });
@@ -134,6 +137,16 @@ export async function GET(request) {
       details = await response.text();
     }
     const message = typeof details === 'object' && details !== null && details.error ? details.error : details;
+    // If Polygon indicates rate limiting (429) surface a clearer message
+    if (response.status === 429) {
+      const body = {
+        error: `Polygon rate limit reached. Try again later.`,
+        request: { url, assetClass, symbol: normalizedSymbol, timeframe: resolvedTimeframe, start: from, end: to }
+      };
+      // cache short-circuit to avoid hammering Polygon
+      _cache.set(key, { expires: Date.now() + 15_000, body });
+      return NextResponse.json(body, { status: 429 });
+    }
     return NextResponse.json(
       {
         error: `Polygon.io responded with status ${response.status}: ${message}`,
@@ -195,16 +208,20 @@ export async function GET(request) {
     warnings.push(`Unsupported timeframe "${requestedTimeframe}". Defaulted to ${resolvedTimeframe}.`);
   }
 
-  return NextResponse.json({
+  const body = {
     symbol: normalizedSymbol,
     timeframe: resolvedTimeframe,
     source: 'polygon',
     bars,
     debugSample: bars.slice(0, 5),
     warning: warnings.length ? warnings.join(' ') : undefined
-  });
+  };
+  // Cache successful responses for 60s to avoid hitting Polygon limits in quick reloads
+  _cache.set(key, { expires: Date.now() + 60_000, body });
+  return NextResponse.json(body);
 }
 
 export async function POST() {
   return NextResponse.json({ error: 'POST not supported on this endpoint.' }, { status: 405 });
 }
+

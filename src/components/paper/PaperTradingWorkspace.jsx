@@ -24,10 +24,26 @@ const TIMEFRAME_PRESETS = [
 ];
 
 function useStickyState(key, defaultValue) {
-  const [state, setState] = useState(() => getLocalStorageValue(key, defaultValue));
+  // Initialize with the default on both server and initial client render to avoid
+  // hydration mismatches. After mount, attempt to load a saved value from
+  // localStorage and overwrite state if present.
+  const [state, setState] = useState(defaultValue);
 
   useEffect(() => {
-    setLocalStorageValue(key, state);
+    try {
+      const saved = getLocalStorageValue(key, null);
+      if (saved != null) {
+        setState(saved);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [key]);
+
+  useEffect(() => {
+    try {
+      setLocalStorageValue(key, state);
+    } catch (e) {}
   }, [key, state]);
 
   return [state, setState];
@@ -74,7 +90,7 @@ function normalizeSymbolForAssetClass(symbol, assetClass = 'stocks') {
   return trimmed.replace(/[^A-Z0-9.]/g, '');
 }
 
-export default function PaperTradingWorkspace() {
+export default function PaperTradingWorkspace({ session: serverSession = null }) {
   const { status: authStatus } = useSession();
   const defaultLists = useMemo(
     () =>
@@ -198,6 +214,15 @@ export default function PaperTradingWorkspace() {
   const chartRef = useRef(null);
   const ticketRef = useRef(null);
   const positionsRef = useRef(null);
+
+  const pushToast = useCallback((toast) => {
+    setToastQueue((prev) => {
+      toastIdRef.current += 1;
+      const generatedId = `toast-${toastIdRef.current}`;
+      const id = toast.id ?? generatedId;
+      return [...prev.slice(-3), { ...toast, id }];
+    });
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -665,7 +690,7 @@ export default function PaperTradingWorkspace() {
     refreshWatchlistData();
     const interval = window.setInterval(() => {
       refreshWatchlistData();
-    }, 45_000);
+    }, 60_000);
     return () => {
       window.clearInterval(interval);
     };
@@ -1063,17 +1088,7 @@ export default function PaperTradingWorkspace() {
     }
   }, []);
 
-  const pushToast = useCallback(
-    (toast) => {
-      setToastQueue((prev) => {
-        toastIdRef.current += 1;
-        const generatedId = `toast-${toastIdRef.current}`;
-        const id = toast.id ?? generatedId;
-        return [...prev.slice(-3), { ...toast, id }];
-      });
-    },
-    [toastIdRef]
-  );
+  
 
   const dismissToast = useCallback((id) => {
     setToastQueue((prev) => prev.filter((toast) => toast.id !== id));

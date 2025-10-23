@@ -45,7 +45,19 @@ export async function storeAlpacaCredentials(userId, { apiKey, secretKey, accoun
   if (!userId) {
     throw new Error('User id is required to store Alpaca credentials.');
   }
-  const existing = await supabaseSelect(ALPACA_TABLE, { match: { user_id: userId }, single: true });
+  let existing = null;
+  try {
+    existing = await supabaseSelect(ALPACA_TABLE, { match: { user_id: userId }, single: true });
+  } catch (err) {
+    // If the Alpaca table doesn't exist in the database (PostgREST PGRST205),
+    // treat as no-op for local/dev environments and return null so callers
+    // don't crash. Re-throw other errors.
+    if (err?.status === 404 && err?.data?.code === 'PGRST205') {
+      // table missing
+      return null;
+    }
+    throw err;
+  }
   const payload = {
     user_id: userId,
     api_key: apiKey,
@@ -57,18 +69,63 @@ export async function storeAlpacaCredentials(userId, { apiKey, secretKey, accoun
     await supabaseUpdate(ALPACA_TABLE, { user_id: userId }, payload);
     return { ...existing, ...payload };
   }
-  const row = await supabaseInsert(ALPACA_TABLE, { ...payload, created_at: payload.updated_at });
-  return row;
+  // Ensure the parent user/credential row exists to avoid FK constraint errors
+  try {
+    const parent = await supabaseSelect(CREDENTIALS_TABLE, { match: { user_id: userId }, single: true });
+    if (!parent) {
+      const error = new Error('Cannot store Alpaca credentials: user record not found. Ensure your account exists before connecting Alpaca.');
+      error.code = 'fk_user_missing';
+      throw error;
+    }
+  } catch (err) {
+    // If supabaseSelect threw because the credentials table is missing, surface a friendly message
+    if (err?.status === 404 && err?.data?.code === 'PGRST205') {
+      return null;
+    }
+    throw err;
+  }
+  try {
+    const row = await supabaseInsert(ALPACA_TABLE, { ...payload, created_at: payload.updated_at });
+    return row;
+  } catch (err) {
+    // If FK constraint or table missing map to friendly errors where possible
+    if (err?.status === 404 && err?.data?.code === 'PGRST205') {
+      return null;
+    }
+    // Some PostgREST errors surface as 400 with a details string; map common FK text
+    const text = err?.message ?? err?.toString?.() ?? '';
+    if (typeof text === 'string' && text.toLowerCase().includes('foreign key')) {
+      const e = new Error('Unable to store Alpaca credentials due to a database constraint (missing parent user). Please contact support or recreate your account.');
+      e.code = 'fk_violation';
+      throw e;
+    }
+    throw err;
+  }
 }
 
 export async function deleteAlpacaCredentials(userId) {
   if (!userId) return;
-  await supabaseDelete(ALPACA_TABLE, { user_id: userId });
+  try {
+    await supabaseDelete(ALPACA_TABLE, { user_id: userId });
+  } catch (err) {
+    if (err?.status === 404 && err?.data?.code === 'PGRST205') {
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function getAlpacaCredentials(userId) {
   if (!userId) return null;
-  const row = await supabaseSelect(ALPACA_TABLE, { match: { user_id: userId }, single: true });
+  let row = null;
+  try {
+    row = await supabaseSelect(ALPACA_TABLE, { match: { user_id: userId }, single: true });
+  } catch (err) {
+    if (err?.status === 404 && err?.data?.code === 'PGRST205') {
+      return null;
+    }
+    throw err;
+  }
   if (!row) return null;
   let account = null;
   if (row.account) {

@@ -45,11 +45,11 @@ export default async function Home() {
               </p>
               <div className="hero-cta-group flex flex-col sm:flex-row gap-4 items-center justify-center mb-6">
                 <Link
-                  href={isAuthenticated ? '/codelab' : '/auth/signup?callbackUrl=/learn'}
+                  href="/learn"
                   className="cta-primary min-h-[52px] px-7"
                   style={{fontSize: '20px', letterSpacing: '-0.4px'}}
                 >
-                  {isAuthenticated ? 'Enter CodeLab' : 'Sign Up'}
+                  Get Started
                 </Link>
                 <Link
                   href="#learn"
@@ -108,14 +108,14 @@ export default async function Home() {
                   </h2>
                   <div className="flex gap-4 mt-8 flex-wrap learn-cta-group">
                     <Link
-                      href={guard('/learn')}
+                      href="/learn"
                       className="cta-primary px-7"
                       style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
                     >
                       Get Started
                     </Link>
                     <Link
-                      href={guard('/paper-trading')}
+                      href="/paper-trading"
                       className="cta-pill px-7"
                       style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
                     >
@@ -240,7 +240,7 @@ export default async function Home() {
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4 code-cta-group">
                     <Link
-                      href={guard('/codelab')}
+                      href="/codelab"
                       className="cta-primary px-7"
                       style={{fontSize: '18px', letterSpacing: '-0.4px'}}
                     >
@@ -284,12 +284,12 @@ backtest(crossover).run('AAPL');`}</pre>
 
       <section
         id="paper"
-        className="py-24"
+        className="py-30"
         style={{ backgroundColor: 'var(--surface-base)' }}
       >
-        <div className="max-w-7xl mx-auto px-4">
+        <div className="max-w-[1800px] mx-auto px-4">
           <div
-            className="section-frame section-wide"
+            className="section-frame paper-frame"
             style={{
               background: 'rgba(255, 255, 255, 0.95)',
               borderColor: 'rgba(15, 47, 31, 0.12)',
@@ -301,12 +301,14 @@ backtest(crossover).run('AAPL');`}</pre>
                 <div className="space-y-6">
                   <span className="section-label">Paper trading</span>
                   <h2
-                    className="text-emerald-950 font-medium"
+                    className="font-medium"
                     style={{
                       fontFamily: '"Ruigslay"',
                       fontSize: 'clamp(48px, 6vw, 72px)',
-                      letterSpacing: '-2px',
-                      textShadow: '0 18px 40px rgba(10, 40, 27, 0.28)'
+                      letterSpacing: '-3px',
+                      textShadow: '0 18px 40px rgba(10, 40, 27, 0.28)',
+                      fontWeight: 600,
+                      color: '#1E1E1E'
                     }}
                   >
                     Run the desk without risking real cash.
@@ -351,14 +353,14 @@ backtest(crossover).run('AAPL');`}</pre>
                   </ul>
                   <div className="flex flex-wrap gap-4">
                     <Link
-                      href={guard('/paper-trading')}
+                      href="/paper-trading"
                       className="cta-primary px-7"
                       style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
                     >
                       Launch paper desk
                     </Link>
                     <Link
-                      href={guard('/paper-trading#desk')}
+                      href="/paper-trading#desk"
                       className="cta-pill px-7"
                       style={{ fontSize: '18px', letterSpacing: '-0.4px' }}
                     >
@@ -404,8 +406,19 @@ backtest(crossover).run('AAPL');`}</pre>
                       <div className="flex flex-col justify-between gap-4">
                         <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-emerald-500/20 via-emerald-400/10 to-transparent p-4">
                           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200/80">Chart</p>
-                          <div className="mt-3 h-40 rounded-xl bg-[#0b2516]">
-                            <div className="h-full w-full rounded-xl bg-[radial-gradient(circle_at_top,#34d39955,transparent_65%)]"></div>
+                          <div className="mt-3 h-40 rounded-xl bg-[#0b2516] flex items-center justify-center">
+                            <div className="w-full h-full rounded-xl px-4 py-3 flex items-center">
+                              <div className="flex-1 flex items-center">
+                                {/* Simple inline sparkline (mock data) */}
+                                <svg viewBox="0 0 120 40" preserveAspectRatio="none" className="w-full h-16">
+                                  <polyline fill="none" stroke="#34d399" strokeWidth="2" points="0,30 15,26 30,18 45,22 60,14 75,10 90,12 105,8 120,12" />
+                                </svg>
+                              </div>
+                              <div className="ml-4 text-right">
+                                <div className="text-emerald-200 font-semibold text-lg">$142.38</div>
+                                <div className="text-sm text-emerald-300">+1.8%</div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -575,14 +588,14 @@ backtest(crossover).run('AAPL');`}</pre>
                 We’re evolving the learning desk in the open. Jump into the repo, suggest improvements, or log an issue so the community can collaborate on fixes.
               </p>
               <div className="support-actions mt-8">
-                <a className="cta-pill" href="https://github.com/AlgoTeen" target="_blank" rel="noreferrer">
+                <a className="cta-pill" href="https://github.com/AgentTurtles/AlgoTeen" target="_blank" rel="noreferrer">
                   View repository
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M5 12H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                     <path d="M13 6L19 12L13 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </a>
-                <a className="cta-pill" href="https://github.com/AlgoTeen/issues/new/choose" target="_blank" rel="noreferrer">
+                <a className="cta-pill" href="https://github.com/AgentTurtles/AlgoTeen/issues/new/choose" target="_blank" rel="noreferrer">
                   Open an issue
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M5 12H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -595,7 +608,7 @@ backtest(crossover).run('AAPL');`}</pre>
                   <h3>Contribute code</h3>
                   <p>Browse open tasks, submit pull requests, and review documentation to help shape the roadmap. Every improvement ships faster with another set of eyes.</p>
                   <div className="support-actions">
-                    <a className="cta-pill" href="https://github.com/AlgoTeen/pulls" target="_blank" rel="noreferrer">
+                    <a className="cta-pill" href="https://github.com/AgentTurtles/AlgoTeen/pulls" target="_blank" rel="noreferrer">
                       Current PRs
                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M5 12H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -608,14 +621,14 @@ backtest(crossover).run('AAPL');`}</pre>
                   <h3>Request features</h3>
                   <p>Seen a gap in the curriculum or tooling? File a ticket with steps to reproduce, screenshots, or ideas so we can slot it into the next sprint.</p>
                   <div className="support-actions">
-                    <a className="cta-pill" href="https://github.com/AlgoTeen/issues" target="_blank" rel="noreferrer">
+                    <a className="cta-pill" href="https://github.com/AgentTurtles/AlgoTeen/issues" target="_blank" rel="noreferrer">
                       View issues
                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M5 12H19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                         <path d="M13 6L19 12L13 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </a>
-                    <a className="cta-pill" href="mailto:support@algoteen.dev">
+                    <a className="cta-pill" href="mailto:shayanejaz2018@gmail.com">
                       Email support
                       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M4 4H20V20H4V4Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>

@@ -1,29 +1,31 @@
 {
-  "type": "module",
-  "name": "algoteen",
-  "version": "0.1.0",
-  "private": true,
-  "imports": {
+    "type": "module",
+    "name": "algoteen",
+    "version": "0.1.0",
+    "private": true,
+    "imports": {
     "backtesting-js": "./src/vendor/backtesting-js/index.js"
-  },
-  "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "next": "15.5.4",
-    "next-auth": "^4.24.11",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "react-xarrows": "^2.0.2"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.4",
-    "tailwindcss": "^4"
+    },
+    "scripts": {
+      "dev": "next dev --turbopack",
+      "build": "next build --turbopack",
+      "start": "next start",
+      "lint": "eslint",
+      "check:auth": "node ./scripts/check_env_and_nextauth.js"
+    },
+    "dependencies": {
+      "next": "15.5.4",
+      "next-auth": "^4.24.11",
+      "react": "19.1.0",
+      "react-dom": "19.1.0",
+      "react-xarrows": "^2.0.2",
+      "lightweight-charts": "^5.0.9"
+    },
+    "devDependencies": {
+      "@eslint/eslintrc": "^3",
+      "@tailwindcss/postcss": "^4",
+      "eslint": "^9",
+      "eslint-config-next": "15.5.4",
+      "tailwindcss": "^4"
+    }
   }
-}

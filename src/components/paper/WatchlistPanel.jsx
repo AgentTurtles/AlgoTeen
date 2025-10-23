@@ -22,6 +22,7 @@ export default function WatchlistPanel({
   return (
     <aside
       ref={reference}
+      suppressHydrationWarning={true}
       className="relative flex h-full w-[232px] flex-col border-r border-slate-200 bg-white"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-3 bg-gradient-to-b from-slate-200/70 to-transparent" aria-hidden />
