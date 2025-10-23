@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
+import { getAlpacaCredentials } from '@/lib/userStore';
+
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET ?? 'algoteen-dev-secret';
 const ACCOUNT_URL = process.env.ALPACA_ACCOUNT_URL ?? 'https://paper-api.alpaca.markets/v2/account';
 
@@ -9,14 +11,29 @@ const TRADING_BASE = process.env.ALPACA_TRADING_BASE_URL ?? 'https://paper-api.a
 const CRYPTO_BASE = process.env.ALPACA_CRYPTO_BASE_URL ?? 'https://data.alpaca.markets/v1beta3';
 const FOREX_BASE = process.env.ALPACA_FOREX_BASE_URL ?? 'https://data.alpaca.markets/v1beta1';
 
-async function fetchStoredCredentials(request) {
-  // Using global Alpaca credentials from environment variables
+function getEnvironmentAlpacaCredentials() {
   const apiKey = process.env.ALPACA_API_KEY;
   const secretKey = process.env.ALPACA_SECRET_KEY;
-  if (!apiKey || !secretKey) {
-    return null;
+  if (apiKey && secretKey) {
+    return { apiKey, secretKey };
   }
-  return { apiKey, secretKey };
+  return null;
+}
+
+async function fetchStoredCredentials(request) {
+  const envCredentials = getEnvironmentAlpacaCredentials();
+
+  const token = await getToken({ req: request, secret: AUTH_SECRET });
+  if (!token?.sub) {
+    return envCredentials;
+  }
+
+  const stored = await getAlpacaCredentials(token.sub);
+  if (stored?.apiKey && stored?.secretKey) {
+    return { apiKey: stored.apiKey, secretKey: stored.secretKey };
+  }
+
+  return envCredentials;
 }
 
 export async function validateAlpacaCredentials(apiKey, secretKey) {
@@ -63,7 +80,7 @@ async function alpacaRequest(
     return { ok: false, status: 401, error: 'Unauthorized' };
   }
 
-  const { apiKey, secretKey, userId } = stored;
+  const { apiKey, secretKey } = stored;
 
   const url = new URL(path, base);
   Object.entries(query ?? {}).forEach(([key, value]) => {
