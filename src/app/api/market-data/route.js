@@ -1,239 +1,210 @@
-
 import { NextResponse } from 'next/server';
+
 const POLYGON_BASE = 'https://api.polygon.io/v2';
 
-// Alpaca endpoints removed
+const TIMEFRAME_CONFIG = {
+  '1Day': { multiplier: 1, timespan: 'day', approxBarsPerDay: 1 },
+  '4Hour': { multiplier: 4, timespan: 'hour', approxBarsPerDay: 6 },
+  '1Hour': { multiplier: 1, timespan: 'hour', approxBarsPerDay: 24 },
+  '15Min': { multiplier: 15, timespan: 'minute', approxBarsPerDay: 96 },
+  '5Min': { multiplier: 5, timespan: 'minute', approxBarsPerDay: 288 }
+};
 
-function buildQuery(searchParams, fallbackLimit = 500) {
-  const params = new URLSearchParams();
-  const timeframe = searchParams.get('timeframe') || '1Day';
-  const limitParam = Number.parseInt(searchParams.get('limit') || fallbackLimit, 10);
-  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 1000) : fallbackLimit;
-
-  params.set('timeframe', timeframe);
-  params.set('limit', String(limit));
-
-  const start = searchParams.get('start');
-  const end = searchParams.get('end');
-  const adjustment = searchParams.get('adjustment');
-
-  if (start) {
-    params.set('start', start);
-  }
-
-  if (end) {
-    params.set('end', end);
-  }
-
-  if (adjustment) {
-    params.set('adjustment', adjustment);
-  }
-
-  return params;
-}
-// End of file
-
-function normalizeBars(payload, fallbackSymbol) {
-  if (Array.isArray(payload?.bars)) {
-    return { symbol: fallbackSymbol, bars: payload.bars };
-  }
-
-  if (payload?.bars && typeof payload.bars === 'object') {
-    const entry = Object.entries(payload.bars)[0];
-    if (entry && Array.isArray(entry[1])) {
-      return { symbol: entry[0] || fallbackSymbol, bars: entry[1] };
+function normalizeSymbol(symbol, assetClass) {
+  const trimmed = (symbol || '').trim().toUpperCase();
+  if (!trimmed) {
+    if (assetClass === 'crypto') {
+      return 'BTC/USD';
     }
+    if (assetClass === 'forex') {
+      return 'EUR/USD';
+    }
+    return 'SPY';
   }
 
-  return { symbol: fallbackSymbol, bars: [] };
+  if (assetClass === 'crypto' || assetClass === 'forex') {
+    if (trimmed.includes('/')) {
+      const [base = '', quote = ''] = trimmed.split('/');
+      const cleanedBase = base.replace(/[^A-Z0-9]/g, '');
+      const cleanedQuote = quote.replace(/[^A-Z0-9]/g, '');
+      if (!cleanedBase || !cleanedQuote) {
+        return trimmed;
+      }
+      return `${cleanedBase}/${cleanedQuote}`;
+    }
+    const alphanumeric = trimmed.replace(/[^A-Z0-9]/g, '');
+    if (alphanumeric.length >= 6) {
+      const base = alphanumeric.slice(0, alphanumeric.length - 3);
+      const quote = alphanumeric.slice(-3);
+      return `${base}/${quote}`;
+    }
+    return alphanumeric;
+  }
+
+  return trimmed.replace(/[^A-Z0-9.]/g, '');
+}
+
+function toPolygonSymbol(symbol, assetClass) {
+  const normalized = normalizeSymbol(symbol, assetClass);
+  if (assetClass === 'crypto') {
+    return `X:${normalized.replace('/', '')}`;
+  }
+  if (assetClass === 'forex') {
+    return `C:${normalized.replace('/', '')}`;
+  }
+  return normalized;
 }
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const assetClass = (searchParams.get('assetClass') || 'stocks').toLowerCase();
-  let symbol = searchParams.get('symbol') || (assetClass === 'crypto' ? 'BTC/USD' : assetClass === 'forex' ? 'EUR/USD' : 'SPY');
-  let timeframe = searchParams.get('timeframe') || (assetClass === 'stocks' ? '1Day' : '1Hour');
 
-
-  // Validate symbol and timeframe for each asset class
-  const validStocks = ['SPY', 'QQQ', 'TSLA'];
-  const validCrypto = ['BTC/USD', 'ETH/USD', 'SOL/USD'];
-  const validForex = ['EUR/USD', 'GBP/USD', 'USD/JPY'];
-  const validStockTimeframes = ['1Day', '4Hour', '1Hour'];
-  const validCryptoTimeframes = ['4Hour', '1Hour', '15Min'];
-  const validForexTimeframes = ['4Hour', '1Hour', '15Min'];
-
-  let valid = true;
-  let errorMsg = '';
-
-  // Get date params once, at the top
-  const start = searchParams.get('start');
-  const end = searchParams.get('end');
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-
-  if (assetClass === 'stocks') {
-    if (!validStocks.includes(symbol)) {
-      errorMsg = `Invalid stock symbol: ${symbol}. Defaulting to SPY.`;
-      symbol = 'SPY';
-      valid = false;
-    }
-    if (!validStockTimeframes.includes(timeframe)) {
-      errorMsg += ` Invalid stock timeframe: ${timeframe}. Defaulting to 1Day.`;
-      timeframe = '1Day';
-      valid = false;
-    }
-  } else if (assetClass === 'crypto') {
-    if (!validCrypto.includes(symbol)) {
-      errorMsg = `Invalid crypto symbol: ${symbol}. Defaulting to BTC/USD.`;
-      symbol = 'BTC/USD';
-      valid = false;
-    }
-    if (!validCryptoTimeframes.includes(timeframe)) {
-      errorMsg += ` Invalid crypto timeframe: ${timeframe}. Defaulting to 1Hour.`;
-      timeframe = '1Hour';
-      valid = false;
-    }
-  } else if (assetClass === 'forex') {
-    if (!validForex.includes(symbol)) {
-      errorMsg = `Invalid forex symbol: ${symbol}. Defaulting to EUR/USD.`;
-      symbol = 'EUR/USD';
-      valid = false;
-    }
-    if (!validForexTimeframes.includes(timeframe)) {
-      errorMsg += ` Invalid forex timeframe: ${timeframe}. Defaulting to 1Hour.`;
-      timeframe = '1Hour';
-      valid = false;
-    }
-  } else {
+  if (!['stocks', 'crypto', 'forex'].includes(assetClass)) {
     return NextResponse.json({ error: `Invalid asset class: ${assetClass}` }, { status: 400 });
   }
 
-  // Date range checks
-  if (start && !dateRegex.test(start)) {
-    return NextResponse.json({ error: 'Invalid start date format. Use YYYY-MM-DD.' }, { status: 400 });
-  }
-  if (end && !dateRegex.test(end)) {
-    return NextResponse.json({ error: 'Invalid end date format. Use YYYY-MM-DD.' }, { status: 400 });
-  }
-  if (start && end) {
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    if (startDate > endDate) {
-      return NextResponse.json({ error: 'Start date must be before end date.' }, { status: 400 });
-    }
-    const now = new Date();
-    if (startDate > now || endDate > now) {
-      return NextResponse.json({ error: 'Dates cannot be in the future.' }, { status: 400 });
-    }
-  }
+  const defaultSymbol = assetClass === 'crypto' ? 'BTC/USD' : assetClass === 'forex' ? 'EUR/USD' : 'SPY';
+  const requestedSymbol = searchParams.get('symbol');
+  const normalizedSymbol = normalizeSymbol(requestedSymbol ?? defaultSymbol, assetClass);
 
+  const defaultTimeframe = assetClass === 'stocks' ? '1Day' : '1Hour';
+  const requestedTimeframe = searchParams.get('timeframe') || defaultTimeframe;
+  const timeframeConfig = TIMEFRAME_CONFIG[requestedTimeframe] ?? TIMEFRAME_CONFIG[defaultTimeframe];
+  const resolvedTimeframe = TIMEFRAME_CONFIG[requestedTimeframe] ? requestedTimeframe : defaultTimeframe;
 
-  // Polygon.io for all asset classes
+  const limitParam = Number.parseInt(searchParams.get('limit') ?? '500', 10);
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 5000) : 500;
+
   const polygonKey = process.env.POLYGON_API_KEY;
   if (!polygonKey) {
-    return NextResponse.json({ error: 'Polygon.io API key missing. Set POLYGON_API_KEY in your environment.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Polygon.io API key missing. Set POLYGON_API_KEY in your environment.' },
+      { status: 500 }
+    );
   }
 
-  // Map timeframe to Polygon.io supported intervals
-  // Polygon: 1Day, 4Hour, 1Hour, 15Min
-  let multiplier = 1;
-  let timespan = 'day';
-  if (timeframe === '4Hour') {
-    multiplier = 4;
-    timespan = 'hour';
-  } else if (timeframe === '1Hour') {
-    multiplier = 1;
-    timespan = 'hour';
-  } else if (timeframe === '15Min') {
-    multiplier = 15;
-    timespan = 'minute';
+  const now = new Date();
+  const rawEnd = searchParams.get('end');
+  let endDate = rawEnd ? new Date(rawEnd) : new Date(now);
+  if (rawEnd && Number.isNaN(endDate.getTime())) {
+    return NextResponse.json({ error: 'Invalid end date format. Use YYYY-MM-DD.' }, { status: 400 });
+  }
+  if (endDate > now) {
+    endDate = now;
   }
 
-  // Symbol mapping for Polygon.io
-  let polygonSymbol = symbol;
-  if (assetClass === 'crypto') {
-    // Polygon: X:BTCUSD
-    polygonSymbol = 'X:' + symbol.replace('/', '');
-  } else if (assetClass === 'forex') {
-    // Polygon: C:EURUSD
-    polygonSymbol = 'C:' + symbol.replace('/', '');
+  const rawStart = searchParams.get('start');
+  let startDate = rawStart ? new Date(rawStart) : null;
+  if (rawStart && Number.isNaN(startDate.getTime())) {
+    return NextResponse.json({ error: 'Invalid start date format. Use YYYY-MM-DD.' }, { status: 400 });
   }
 
-  // Polygon expects YYYY-MM-DD for from/to
-  const from = start || '2022-01-01';
-  const to = end || new Date().toISOString().slice(0, 10);
-  const url = `${POLYGON_BASE}/aggs/ticker/${polygonSymbol}/range/${multiplier}/${timespan}/${from}/${to}?adjusted=true&sort=asc&limit=5000&apiKey=${polygonKey}`;
+  if (!startDate) {
+    const approxBars = timeframeConfig.approxBarsPerDay || 1;
+    const lookbackDays = Math.max(2, Math.ceil(limit / approxBars) + 2);
+    startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - lookbackDays);
+  }
+
+  if (startDate > endDate) {
+    return NextResponse.json({ error: 'Start date must be before end date.' }, { status: 400 });
+  }
+
+  const from = startDate.toISOString().slice(0, 10);
+  const to = endDate.toISOString().slice(0, 10);
+  const polygonSymbol = toPolygonSymbol(normalizedSymbol, assetClass);
+
+  const url = `${POLYGON_BASE}/aggs/ticker/${polygonSymbol}/range/${timeframeConfig.multiplier}/${timeframeConfig.timespan}/${from}/${to}?adjusted=true&sort=asc&limit=${limit}&apiKey=${polygonKey}`;
 
   let response;
   try {
     response = await fetch(url, { cache: 'no-store' });
   } catch (error) {
-    return NextResponse.json({ error: `Unable to reach Polygon.io: ${error.message}`, request: { url, assetClass, symbol, timeframe, start, end } }, { status: 502 });
+    return NextResponse.json(
+      { error: `Unable to reach Polygon.io: ${error.message}`, request: { url, assetClass, symbol: normalizedSymbol, timeframe: resolvedTimeframe, start: from, end: to } },
+      { status: 502 }
+    );
   }
 
   if (!response.ok) {
-    let details = await response.text();
-    return NextResponse.json({ error: `Polygon.io responded with status ${response.status}: ${details}`, request: { url, assetClass, symbol, timeframe, start, end } }, { status: response.status });
+    let details;
+    try {
+      details = await response.json();
+    } catch (error) {
+      details = await response.text();
+    }
+    const message = typeof details === 'object' && details !== null && details.error ? details.error : details;
+    return NextResponse.json(
+      {
+        error: `Polygon.io responded with status ${response.status}: ${message}`,
+        request: { url, assetClass, symbol: normalizedSymbol, timeframe: resolvedTimeframe, start: from, end: to }
+      },
+      { status: response.status }
+    );
   }
 
   let rawPayload;
   try {
     rawPayload = await response.json();
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to parse Polygon.io response as JSON.', request: { url, assetClass, symbol, timeframe, start, end } }, { status: 502 });
+    return NextResponse.json(
+      { error: 'Failed to parse Polygon.io response as JSON.', request: { url, assetClass, symbol: normalizedSymbol, timeframe: resolvedTimeframe, start: from, end: to } },
+      { status: 502 }
+    );
   }
 
-  // Polygon.io returns { results: [ { t, o, h, l, c, v, ... } ] }
-  if (!rawPayload.results || !Array.isArray(rawPayload.results) || rawPayload.results.length === 0) {
-    return NextResponse.json({ error: 'No market data available from Polygon.io.', request: { url, assetClass, symbol, timeframe, start, end } }, { status: 404 });
+  const results = Array.isArray(rawPayload?.results) ? rawPayload.results : [];
+  if (!results.length) {
+    return NextResponse.json(
+      { error: 'No market data available from Polygon.io.', request: { url, assetClass, symbol: normalizedSymbol, timeframe: resolvedTimeframe, start: from, end: to } },
+      { status: 404 }
+    );
   }
 
-  const bars = rawPayload.results.map((bar) => ({
-    date: new Date(bar.t).toISOString().slice(0, 10),
-    open: bar.o,
-    high: bar.h,
-    low: bar.l,
-    close: bar.c,
-    volume: bar.v
-  }));
+  const bars = results
+    .map((bar) => ({
+      date: new Date(bar.t).toISOString().slice(0, 10),
+      open: Number(bar.o),
+      high: Number(bar.h),
+      low: Number(bar.l),
+      close: Number(bar.c),
+      volume: Number(bar.v)
+    }))
+    .filter(
+      (bar) =>
+        bar.date &&
+        Number.isFinite(bar.open) &&
+        Number.isFinite(bar.high) &&
+        Number.isFinite(bar.low) &&
+        Number.isFinite(bar.close) &&
+        Number.isFinite(bar.volume)
+    );
 
-  const filteredBars = bars.filter(
-    (bar) =>
-      bar.date &&
-      Number.isFinite(bar.open) &&
-      Number.isFinite(bar.high) &&
-      Number.isFinite(bar.low) &&
-      Number.isFinite(bar.close) &&
-      Number.isFinite(bar.volume)
-  );
-
-  if (filteredBars.length === 0) {
-    return NextResponse.json({ error: 'No market data available for this symbol, timeframe, or date range from Polygon.io.', request: { url, assetClass, symbol, timeframe, start, end } }, { status: 404 });
+  if (!bars.length) {
+    return NextResponse.json(
+      {
+        error: 'No market data available for this symbol, timeframe, or date range from Polygon.io.',
+        request: { url, assetClass, symbol: normalizedSymbol, timeframe: resolvedTimeframe, start: from, end: to }
+      },
+      { status: 404 }
+    );
   }
 
-  if (!valid && errorMsg) {
-    // Add a sample of bars for debugging
-    return NextResponse.json({
-      warning: errorMsg,
-      symbol,
-      timeframe,
-      source: 'polygon',
-      bars: filteredBars,
-      debugSample: filteredBars.slice(0, 5)
-    });
+  const warnings = [];
+  if (resolvedTimeframe !== requestedTimeframe) {
+    warnings.push(`Unsupported timeframe "${requestedTimeframe}". Defaulted to ${resolvedTimeframe}.`);
   }
 
-  // Always include a debug sample for troubleshooting
   return NextResponse.json({
-    symbol,
-    timeframe,
+    symbol: normalizedSymbol,
+    timeframe: resolvedTimeframe,
     source: 'polygon',
-    bars: filteredBars,
-    debugSample: filteredBars.slice(0, 5)
+    bars,
+    debugSample: bars.slice(0, 5),
+    warning: warnings.length ? warnings.join(' ') : undefined
   });
 }
 
-// Catch-all error handler for unexpected errors
 export async function POST() {
   return NextResponse.json({ error: 'POST not supported on this endpoint.' }, { status: 405 });
 }
