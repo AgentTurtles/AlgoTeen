@@ -46,24 +46,11 @@ export default function TradeChart({
       typeof value === 'object' &&
       value.$$typeof === reactElementType;
 
-    const resolveChartApi = (value, options = {}) => {
-      const { visited = new Set(), depth = 0, maxDepth = 6 } = options;
-      if (!value || visited.has(value) || depth > maxDepth) {
-        return null;
-      }
-      visited.add(value);
-      if (typeof value.addCandlestickSeries === 'function') {
-        return value;
-      }
+    const resolveChartApi = (entry) => {
+      if (!entry) return null;
 
-      if (typeof value !== 'object' && typeof value !== 'function') {
-        return null;
-      }
-
-      if (isReactElement(value)) {
-        return null;
-      }
-
+      const seen = new Set();
+      const queue = [entry];
       const candidateKeys = [
         'chart',
         'chartApi',
@@ -77,38 +64,60 @@ export default function TradeChart({
         'instance'
       ];
 
-      const inspectKey = (key, getter) => {
-        if (key === 'ref') return null;
-        try {
-          if (!getter) return null;
-          const candidate = getter();
-          if (!candidate) return null;
-          return resolveChartApi(candidate, { visited, depth: depth + 1, maxDepth });
-        } catch (e) {
-          return null;
+      while (queue.length) {
+        const value = queue.shift();
+        if (!value || seen.has(value)) continue;
+        seen.add(value);
+
+        if (typeof value.addCandlestickSeries === 'function') {
+          return value;
         }
-      };
 
-      for (const key of candidateKeys) {
-        const resolved = inspectKey(key, () => value[key]);
-        if (resolved) return resolved;
-      }
+        const valueType = typeof value;
+        if (valueType !== 'object' && valueType !== 'function') {
+          continue;
+        }
 
-      const keysToInspect = new Set();
-      try {
-        for (const key of Object.keys(value)) keysToInspect.add(key);
-      } catch (e) {}
-      try {
-        for (const key of Object.getOwnPropertyNames(value)) keysToInspect.add(key);
-      } catch (e) {}
-      try {
-        for (const sym of Object.getOwnPropertySymbols(value)) keysToInspect.add(sym);
-      } catch (e) {}
+        if (isReactElement(value)) {
+          continue;
+        }
 
-      for (const key of keysToInspect) {
-        if (candidateKeys.includes(key) || key === 'ref') continue;
-        const resolved = inspectKey(key, () => value[key]);
-        if (resolved) return resolved;
+        const enqueue = (candidate) => {
+          if (!candidate || seen.has(candidate)) return;
+          queue.push(candidate);
+        };
+
+        for (const key of candidateKeys) {
+          if (key === 'ref') continue;
+          try {
+            enqueue(value[key]);
+          } catch (e) {}
+        }
+
+        try {
+          const ownKeys = [
+            ...Object.keys(value),
+            ...Object.getOwnPropertyNames(value)
+          ];
+          for (const key of ownKeys) {
+            if (candidateKeys.includes(key) || key === 'ref') continue;
+            enqueue(value[key]);
+          }
+        } catch (e) {}
+
+        try {
+          const symbols = Object.getOwnPropertySymbols(value);
+          for (const sym of symbols) {
+            enqueue(value[sym]);
+          }
+        } catch (e) {}
+
+        try {
+          const proto = Object.getPrototypeOf(value);
+          if (proto && proto !== Object.prototype && proto !== Function.prototype) {
+            enqueue(proto);
+          }
+        } catch (e) {}
       }
 
       return null;
@@ -201,122 +210,208 @@ export default function TradeChart({
         }
       });
 
+    const loadLightweightChartsFromCdn = () => {
+      if (typeof window === 'undefined') return Promise.resolve(null);
+      if (window.LightweightCharts?.createChart) {
+        return Promise.resolve(window.LightweightCharts);
+      }
+
+      if (window.__lightweightChartsPromise) {
+        return window.__lightweightChartsPromise;
+      }
+
+      window.__lightweightChartsPromise = new Promise((resolve, reject) => {
+        try {
+          const existing = document.querySelector('script[data-lightweight-charts]');
+          if (existing) {
+            existing.addEventListener('load', () => resolve(window.LightweightCharts ?? null), {
+              once: true
+            });
+            existing.addEventListener(
+              'error',
+              (event) => reject(event instanceof Event ? new Error('Failed to load lightweight-charts script') : event),
+              { once: true }
+            );
+            return;
+          }
+
+          const script = document.createElement('script');
+          script.src = 'https://unpkg.com/lightweight-charts@5.0.9/dist/lightweight-charts.standalone.production.js';
+          script.async = true;
+          script.crossOrigin = 'anonymous';
+          script.dataset.lightweightCharts = 'true';
+          script.addEventListener('load', () => resolve(window.LightweightCharts ?? null), { once: true });
+          script.addEventListener('error', (event) => {
+            reject(event instanceof Event ? new Error('Failed to load lightweight-charts script') : event);
+          });
+          document.head.appendChild(script);
+        } catch (error) {
+          reject(error);
+        }
+      }).finally(() => {
+        if (!window.LightweightCharts?.createChart) {
+          delete window.__lightweightChartsPromise;
+        }
+      });
+
+      return window.__lightweightChartsPromise;
+    };
+
     const initialiseChart = async () => {
-      let module;
-      try {
-        module = await import('lightweight-charts');
-      } catch (error) {
-        if (disposed) return;
-        console.error('TradeChart: failed to load lightweight-charts module', error);
-        setDebugInfo({ error: 'moduleImport', message: error?.message ?? String(error) });
-        setUseFallback(true);
-        cleanup();
-        return;
-      }
+      const chartOptions = {
+        layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
+        rightPriceScale: { visible: true },
+        timeScale: { timeVisible: true, rightOffset: 12 }
+      };
 
-      if (disposed) return;
+      const attemptLoaders = [
+        {
+          source: 'module',
+          load: async () => {
+            let module;
+            try {
+              module = await import('lightweight-charts');
+            } catch (error) {
+              throw { type: 'moduleImport', error };
+            }
 
-      const createChartFn =
-        typeof module?.createChart === 'function'
-          ? module.createChart
-          : typeof module?.default === 'function'
-            ? module.default
-            : typeof module?.default?.createChart === 'function'
-              ? module.default.createChart
-              : null;
+            const createChartFn =
+              typeof module?.createChart === 'function'
+                ? module.createChart
+                : typeof module?.default === 'function'
+                  ? module.default
+                  : typeof module?.default?.createChart === 'function'
+                    ? module.default.createChart
+                    : null;
 
-      const crosshairModeNormal =
-        module?.CrosshairMode?.Normal ??
-        module?.default?.CrosshairMode?.Normal ??
-        0;
+            const crosshairModeNormal =
+              module?.CrosshairMode?.Normal ??
+              module?.default?.CrosshairMode?.Normal ??
+              0;
 
-      if (typeof createChartFn !== 'function') {
-        console.error('TradeChart: createChart export is not a function');
-        setDebugInfo({ error: 'createChartExport', message: 'Invalid createChart export' });
-        setUseFallback(true);
-        cleanup();
-        return;
-      }
+            if (typeof createChartFn !== 'function') {
+              throw { type: 'createChartExport', error: new Error('Invalid createChart export') };
+            }
 
-      let created;
-      try {
-        const maybeCreated = createChartFn(container, {
-          layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
-          rightPriceScale: { visible: true },
-          timeScale: { timeVisible: true, rightOffset: 12 },
-          crosshair: { mode: crosshairModeNormal }
-        });
-        created = await maybeCreated;
-      } catch (error) {
-        if (disposed) return;
-        console.error('TradeChart: error creating chart', error);
-        setDebugInfo({ error: 'createChart', message: error?.message ?? String(error) });
-        setUseFallback(true);
-        cleanup();
-        return;
-      }
+            return {
+              createChart: createChartFn,
+              crosshairMode: crosshairModeNormal,
+              meta: { source: 'module' }
+            };
+          }
+        },
+        {
+          source: 'cdn',
+          load: async () => {
+            if (typeof window === 'undefined') {
+              return null;
+            }
 
-      if (disposed) return;
+            const globalLib = await loadLightweightChartsFromCdn();
+            if (!globalLib?.createChart) {
+              throw { type: 'cdnLoad', error: new Error('CDN script did not expose createChart') };
+            }
 
-      const unwrapCandidates = [
-        created,
-        created?.chart,
-        created?.chartApi,
-        created?.api,
-        created?.value,
-        created?.default,
-        created?.instance,
-        created?.current
+            return {
+              createChart: globalLib.createChart.bind(globalLib),
+              crosshairMode: globalLib?.CrosshairMode?.Normal ?? 0,
+              meta: { source: 'cdn' }
+            };
+          }
+        }
       ];
 
-      for (const candidate of unwrapCandidates) {
-        if (candidate && typeof candidate.addCandlestickSeries === 'function') {
-          chartInstance = candidate;
+      let lastError = null;
+      let resolutionMeta = null;
+
+      for (const attempt of attemptLoaders) {
+        if (disposed) return;
+
+        let payload;
+        try {
+          payload = await attempt.load();
+        } catch (failure) {
+          if (disposed) return;
+          const failureInfo = failure && failure.type ? failure : { type: 'unknown', error: failure };
+          lastError = failureInfo.error ?? failureInfo;
+          console.error(`TradeChart: ${failureInfo.type === 'moduleImport' ? 'failed to load lightweight-charts module' : failureInfo.type === 'cdnLoad' ? 'failed to initialise lightweight-charts from CDN' : 'chart loader error'}`, failureInfo.error ?? failureInfo);
+          continue;
+        }
+
+        if (!payload || typeof payload.createChart !== 'function') {
+          lastError = new Error('Chart loader returned no factory');
+          continue;
+        }
+
+        if (disposed) return;
+
+        try {
+          container.innerHTML = '';
+        } catch (e) {}
+
+        let created;
+        try {
+          created = payload.createChart(container, {
+            ...chartOptions,
+            crosshair: { mode: payload.crosshairMode ?? 0 }
+          });
+        } catch (error) {
+          if (disposed) return;
+          lastError = error;
+          console.error(`TradeChart: error creating chart via ${payload.meta?.source ?? attempt.source}`, error);
+          continue;
+        }
+
+        const disposeCreated = () => {
+          if (!created) return;
+          try {
+            if (typeof created.remove === 'function') {
+              created.remove();
+            }
+          } catch (e) {}
+        };
+
+        chartInstance = resolveChartApi(created);
+        let resolvedVia = 'direct';
+
+        if (!chartInstance) {
+          chartInstance = findApiFromDom(container);
+          if (chartInstance) {
+            resolvedVia = 'dom';
+          }
+        }
+
+        if (!chartInstance) {
+          await waitForNextFrame();
+          if (disposed) return;
+          chartInstance = resolveChartApi(created) ?? findApiFromDom(container);
+          if (chartInstance && resolvedVia !== 'dom') {
+            resolvedVia = 'deferred';
+          } else if (chartInstance && resolvedVia === 'dom') {
+            resolvedVia = 'dom-deferred';
+          }
+        }
+
+        if (chartInstance && typeof chartInstance.addCandlestickSeries === 'function') {
+          resolutionMeta = {
+            source: payload.meta?.source ?? attempt.source,
+            resolvedVia
+          };
           break;
         }
-      }
 
-      if (!chartInstance) {
-        for (const candidate of unwrapCandidates) {
-          const resolved = resolveChartApi(candidate);
-          if (resolved && typeof resolved.addCandlestickSeries === 'function') {
-            chartInstance = resolved;
-            break;
-          }
-        }
-      }
-
-      if (!chartInstance) {
-        chartInstance = findApiFromDom(container);
-      }
-
-      if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
-        await waitForNextFrame();
-        if (disposed) return;
-        const deferredCandidates = [
-          created,
-          chartInstance,
-          ...unwrapCandidates
-        ];
-        let deferredResolution = null;
-        for (const candidate of deferredCandidates) {
-          const resolved = resolveChartApi(candidate);
-          if (resolved && typeof resolved.addCandlestickSeries === 'function') {
-            deferredResolution = resolved;
-            break;
-          }
-        }
-        if (!deferredResolution) {
-          deferredResolution = findApiFromDom(container);
-        }
-        if (deferredResolution && typeof deferredResolution.addCandlestickSeries === 'function') {
-          chartInstance = deferredResolution;
-        }
+        disposeCreated();
+        chartInstance = null;
+        lastError = new Error('createChart result did not expose a usable API');
       }
 
       if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
         console.error('TradeChart: could not resolve chart API from createChart result');
-        setDebugInfo({ error: 'chartApi', message: 'Failed to resolve chart API' });
+        setDebugInfo({
+          error: 'chartApi',
+          message: 'Failed to resolve chart API',
+          details: lastError?.message
+        });
         setUseFallback(true);
         cleanup();
         return;
@@ -385,7 +480,7 @@ export default function TradeChart({
       }
 
       setUseFallback(false);
-      setDebugInfo({ initialized: true });
+      setDebugInfo({ initialized: true, ...(resolutionMeta ?? {}) });
     };
 
     initialiseChart();
