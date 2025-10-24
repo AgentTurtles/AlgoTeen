@@ -38,6 +38,93 @@ export default function TradeChart({
     let chartInstance = null;
     let resizeObserver = null;
 
+    const resolveChartApi = (value, options = {}) => {
+      const { visited = new Set(), depth = 0, maxDepth = 5 } = options;
+      if (!value || typeof value !== 'object' || depth > maxDepth || visited.has(value)) {
+        return null;
+      }
+      visited.add(value);
+      if (typeof value.addCandlestickSeries === 'function') {
+        return value;
+      }
+
+      const candidateKeys = [
+        'chart',
+        'chartApi',
+        'api',
+        '_chart',
+        '__chart',
+        '_lightweightChart',
+        'value',
+        'current',
+        'default',
+        'instance'
+      ];
+
+      for (const key of candidateKeys) {
+        if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+        const candidate = value[key];
+        const resolved = resolveChartApi(candidate, { visited, depth: depth + 1, maxDepth });
+        if (resolved) return resolved;
+      }
+
+      try {
+        const keys = Object.keys(value);
+        for (const key of keys) {
+          if (candidateKeys.includes(key)) continue;
+          const candidate = value[key];
+          if (typeof candidate !== 'object') continue;
+          const resolved = resolveChartApi(candidate, { visited, depth: depth + 1, maxDepth });
+          if (resolved) return resolved;
+        }
+      } catch (e) {}
+
+      return null;
+    };
+
+    const findApiFromDom = (root) => {
+      if (!root) return null;
+      const visited = new Set();
+      const stack = [{ node: root, depth: 0 }];
+      const maxDepth = 3;
+      const propCandidates = ['_chart', '__chart', 'chart', 'chartApi', '_lightweightChart'];
+
+      while (stack.length) {
+        const { node, depth } = stack.pop();
+        if (!node || visited.has(node) || depth > maxDepth) continue;
+        visited.add(node);
+
+        try {
+          for (const key of propCandidates) {
+            if (key in node) {
+              const resolved = resolveChartApi(node[key]);
+              if (resolved) return resolved;
+            }
+          }
+        } catch (e) {}
+
+        try {
+          const props = Object.getOwnPropertyNames(node);
+          for (const prop of props) {
+            if (propCandidates.includes(prop)) continue;
+            const val = node[prop];
+            const resolved = resolveChartApi(val);
+            if (resolved) return resolved;
+          }
+        } catch (e) {}
+
+        try {
+          if (node.childNodes && node.childNodes.length) {
+            node.childNodes.forEach((child) => {
+              stack.push({ node: child, depth: depth + 1 });
+            });
+          }
+        } catch (e) {}
+      }
+
+      return null;
+    };
+
     const handleResize = () => {
       if (!containerRef.current || !chartRef.current) return;
       const { width, height } = containerRef.current.getBoundingClientRect();
@@ -74,15 +161,24 @@ export default function TradeChart({
     } catch (e) {}
 
     try {
-      chartInstance = createChart(container, {
+      const created = createChart(container, {
         layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
         rightPriceScale: { visible: true },
         timeScale: { timeVisible: true, rightOffset: 12 },
         crosshair: { mode: CrosshairMode.Normal }
       });
+      chartInstance = resolveChartApi(created) ?? findApiFromDom(container) ?? created;
     } catch (error) {
       console.error('TradeChart: error creating chart', error);
       setDebugInfo({ error: 'createChart', message: error?.message ?? String(error) });
+      setUseFallback(true);
+      cleanup();
+      return cleanup;
+    }
+
+    if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
+      console.error('TradeChart: could not resolve chart API from createChart result');
+      setDebugInfo({ error: 'chartApi', message: 'Failed to resolve chart API' });
       setUseFallback(true);
       cleanup();
       return cleanup;
