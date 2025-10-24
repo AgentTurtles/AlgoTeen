@@ -39,8 +39,8 @@ export default function TradeChart({
     let disposed = false;
 
     const resolveChartApi = (value, options = {}) => {
-      const { visited = new Set(), depth = 0, maxDepth = 5 } = options;
-      if (!value || typeof value !== 'object' || depth > maxDepth || visited.has(value)) {
+      const { visited = new Set(), depth = 0, maxDepth = 6 } = options;
+      if (!value || visited.has(value) || depth > maxDepth) {
         return null;
       }
       visited.add(value);
@@ -61,23 +61,38 @@ export default function TradeChart({
         'instance'
       ];
 
+      const inspectKey = (key, getter) => {
+        try {
+          if (!getter) return null;
+          const candidate = getter();
+          if (!candidate) return null;
+          return resolveChartApi(candidate, { visited, depth: depth + 1, maxDepth });
+        } catch (e) {
+          return null;
+        }
+      };
+
       for (const key of candidateKeys) {
-        if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
-        const candidate = value[key];
-        const resolved = resolveChartApi(candidate, { visited, depth: depth + 1, maxDepth });
+        const resolved = inspectKey(key, () => value[key]);
         if (resolved) return resolved;
       }
 
+      const keysToInspect = new Set();
       try {
-        const keys = Object.keys(value);
-        for (const key of keys) {
-          if (candidateKeys.includes(key)) continue;
-          const candidate = value[key];
-          if (typeof candidate !== 'object') continue;
-          const resolved = resolveChartApi(candidate, { visited, depth: depth + 1, maxDepth });
-          if (resolved) return resolved;
-        }
+        for (const key of Object.keys(value)) keysToInspect.add(key);
       } catch (e) {}
+      try {
+        for (const key of Object.getOwnPropertyNames(value)) keysToInspect.add(key);
+      } catch (e) {}
+      try {
+        for (const sym of Object.getOwnPropertySymbols(value)) keysToInspect.add(sym);
+      } catch (e) {}
+
+      for (const key of keysToInspect) {
+        if (candidateKeys.includes(key)) continue;
+        const resolved = inspectKey(key, () => value[key]);
+        if (resolved) return resolved;
+      }
 
       return null;
     };
@@ -160,6 +175,15 @@ export default function TradeChart({
       container.innerHTML = '';
     } catch (e) {}
 
+    const waitForNextFrame = () =>
+      new Promise((resolve) => {
+        try {
+          requestAnimationFrame(() => resolve());
+        } catch (e) {
+          setTimeout(() => resolve(), 16);
+        }
+      });
+
     const initialiseChart = async () => {
       let module;
       try {
@@ -197,14 +221,18 @@ export default function TradeChart({
         return;
       }
 
+      let created;
       try {
-        const created = createChartFn(container, {
+        created = createChartFn(container, {
           layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
           rightPriceScale: { visible: true },
           timeScale: { timeVisible: true, rightOffset: 12 },
           crosshair: { mode: crosshairModeNormal }
         });
-        chartInstance = resolveChartApi(created) ?? findApiFromDom(container) ?? created;
+        chartInstance =
+          resolveChartApi(created) ??
+          findApiFromDom(container) ??
+          created;
       } catch (error) {
         if (disposed) return;
         console.error('TradeChart: error creating chart', error);
@@ -215,6 +243,18 @@ export default function TradeChart({
       }
 
       if (disposed) return;
+
+      if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
+        await waitForNextFrame();
+        if (disposed) return;
+        const deferredResolution =
+          resolveChartApi(created) ??
+          resolveChartApi(chartInstance) ??
+          findApiFromDom(container);
+        if (deferredResolution && typeof deferredResolution.addCandlestickSeries === 'function') {
+          chartInstance = deferredResolution;
+        }
+      }
 
       if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
         console.error('TradeChart: could not resolve chart API from createChart result');
