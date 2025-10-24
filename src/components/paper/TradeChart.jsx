@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 const TV_SCRIPT_SRC = 'https://s3.tradingview.com/tv.js';
 
@@ -138,7 +138,8 @@ export default function TradeChart({
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const containerId = useMemo(() => `tradingview-${Math.random().toString(36).slice(2)}`, []);
+  const reactId = useId();
+  const containerId = useMemo(() => `tradingview-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`, [reactId]);
 
   useEffect(() => {
     if (!reference) {
