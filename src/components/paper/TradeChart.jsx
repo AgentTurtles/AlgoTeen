@@ -88,14 +88,6 @@ export default function TradeChart({
       return cleanup;
     }
 
-    if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
-      console.error('TradeChart: createChart did not return a valid chart API. Received:', chartInstance);
-      setDebugInfo({ error: 'invalidChartApi' });
-      setUseFallback(true);
-      cleanup();
-      return cleanup;
-    }
-
     chartRef.current = chartInstance;
 
     try {
@@ -156,6 +148,7 @@ export default function TradeChart({
       }
     }
 
+    setUseFallback(false);
     setDebugInfo({ initialized: true });
 
     return cleanup;
