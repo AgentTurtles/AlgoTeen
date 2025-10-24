@@ -189,8 +189,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
     reduceOnly: false
   });
 
-  const [overlayState, setOverlayState] = useState({ sma: true, vwap: true, rsi: true });
-  const [pendingMarkers, setPendingMarkers] = useState({ entry: null, stop: null, target: null });
   const [toastQueue, setToastQueue] = useState([]);
   const [alpacaStatus, setAlpacaStatus] = useState({ loading: true, connected: false, account: null, error: null });
   const [credentialsDraft, setCredentialsDraft] = useState({ apiKey: '', secretKey: '', submitting: false, error: null });
@@ -200,9 +198,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
   const [placing, setPlacing] = useState(false);
   const [clock, setClock] = useState(null);
   const [livePrices, setLivePrices] = useState({});
-  const [chartSeries, setChartSeries] = useState([]);
-  const [chartLoading, setChartLoading] = useState(false);
-  const [chartError, setChartError] = useState(null);
   const [searchResults, setSearchResults] = useState([]);
   const [watchlistSnapshots, setWatchlistSnapshots] = useState({});
   const [watchlistStatus, setWatchlistStatus] = useState({ loading: false, error: null, lastUpdated: null });
@@ -463,7 +458,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
         setOrders([]);
         setEquityTimeline([]);
         setLastAction(null);
-        setPendingMarkers({ entry: null, stop: null, target: null });
         pushToast({ title: 'Alpaca disconnected', message: 'Removed keys — reconnect when you are ready to trade.' });
       } catch (error) {
         const message = error?.message ?? 'Unable to disconnect from Alpaca right now.';
@@ -764,115 +758,20 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
   }, [account.equity, setEquityTimeline]);
 
   useEffect(() => {
-    if (!selectedSymbol) return undefined;
-    let active = true;
-
-    async function loadBars() {
-      setChartLoading(true);
-      setChartError(null);
-      try {
-        const meta = getSymbolMeta(selectedSymbol);
-        const derivedAssetClass = meta?.assetClass ?? 'stocks';
-        const preset = TIMEFRAME_PRESETS.find((option) => option.id === timeframe);
-        const timeframeParam = preset?.timeframe ?? '1Day';
-        const limitParam = preset?.limit ?? 300;
-        const lookbackDays = preset?.lookbackDays ?? 120;
-        const params = new URLSearchParams({
-          symbol: selectedSymbol,
-          timeframe: timeframeParam,
-          limit: String(limitParam),
-          assetClass: derivedAssetClass
-        });
-        const now = new Date();
-        const start = new Date(now);
-        start.setDate(start.getDate() - lookbackDays);
-        params.set('start', start.toISOString().slice(0, 10));
-        params.set('end', now.toISOString().slice(0, 10));
-
-        const response = await fetch(`/api/market-data?${params.toString()}`, { cache: 'no-store' });
-        if (!active) return;
-
-        let payload = null;
-        try {
-          payload = await response.json();
-        } catch (error) {
-          payload = null;
-        }
-
-        if (!response.ok) {
-          const message = payload?.error ?? 'Unable to load Polygon market data right now.';
-          setChartSeries([]);
-          setChartError(message);
-          return;
-        }
-
-        if (!payload) {
-          setChartSeries([]);
-          setChartError('Unable to parse Polygon market data response.');
-          return;
-        }
-
-        const bars = Array.isArray(payload?.bars) ? payload.bars : [];
-        if (!bars.length) {
-          setChartSeries([]);
-          setChartError('No Polygon data available for this selection.');
-          return;
-        }
-        const transformed = bars
-          .map((bar, index) => {
-            const open = Number.parseFloat(bar.open ?? bar.o ?? 0) || 0;
-            const high = Number.parseFloat(bar.high ?? bar.h ?? 0) || 0;
-            const low = Number.parseFloat(bar.low ?? bar.l ?? 0) || 0;
-            const close = Number.parseFloat(bar.close ?? bar.c ?? 0) || 0;
-            const volume = Number.parseFloat(bar.volume ?? bar.v ?? 0) || 0;
-            const rawTime =
-              bar.t != null
-                ? Number.parseInt(bar.t, 10)
-                : bar.date
-                  ? Date.parse(bar.date)
-                  : null;
-            return {
-              index: index,
-              open,
-              high,
-              low,
-              close,
-              volume,
-              time: Number.isFinite(rawTime) ? rawTime : index
-            };
-          })
-          .filter(
-            (bar) =>
-              Number.isFinite(bar.open) &&
-              Number.isFinite(bar.high) &&
-              Number.isFinite(bar.low) &&
-              Number.isFinite(bar.close) &&
-              Number.isFinite(bar.volume)
-          );
-        setChartSeries(transformed);
-        if (transformed.length) {
-          const lastClose = transformed[transformed.length - 1].close;
-          setLivePrices((prev) => ({ ...prev, [selectedSymbol]: lastClose }));
-        }
-        setChartError(null);
-      } catch (error) {
-        if (!active) return;
-        setChartSeries([]);
-        setChartError('Unable to load Polygon market data right now.');
-      } finally {
-        if (active) {
-          setChartLoading(false);
-        }
-      }
+    if (typeof window === 'undefined' || !selectedSymbol) {
+      return undefined;
     }
-
-    loadBars();
-    const id = window.setInterval(loadBars, 60_000);
-    return () => {
-      active = false;
-      window.clearInterval(id);
-    };
-  }, [getSymbolMeta, selectedSymbol, timeframe]);
+    const preset = TIMEFRAME_PRESETS.find((option) => option.id === timeframe);
+    const resolution = preset?.timeframe ?? '1Day';
+    if (resolution.toLowerCase().includes('day')) {
+      return undefined;
+    }
+    const interval = window.setInterval(() => {
+      const quote = getSymbolPrice(selectedSymbol);
+      setLivePrices((prev) => ({ ...prev, [selectedSymbol]: quote }));
+    }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [getSymbolPrice, selectedSymbol, timeframe]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated') return undefined;
@@ -908,7 +807,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
     }
   }, [searchResults.length, setActiveWatchlistId, watchQuery]);
 
-  const chartData = chartSeries;
   const rawBestPrice = getSymbolPrice(selectedSymbol);
   const bestPrice = Number.isFinite(rawBestPrice) ? rawBestPrice : 0;
 
@@ -1000,6 +898,8 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
     };
   }, [clock]);
 
+  const selectedMeta = useMemo(() => getSymbolMeta(selectedSymbol), [getSymbolMeta, selectedSymbol]);
+
   useEffect(() => {
     if (!Number.isFinite(rawBestPrice) || rawBestPrice <= 0) {
       return;
@@ -1009,86 +909,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
       limitPrice: prev.type === 'market' ? prev.limitPrice : roundTo(rawBestPrice, 2)
     }));
   }, [rawBestPrice, setOrderDraft]);
-
-  const handleOverlayToggle = useCallback((key, explicit) => {
-    setOverlayState((prev) => ({
-      ...prev,
-      [key]: typeof explicit === 'boolean' ? explicit : !prev[key]
-    }));
-  }, []);
-
-  const handleChartClick = useCallback(
-    (price) => {
-      const rounded = roundTo(price, 2);
-      setPendingMarkers((prev) => ({
-        ...prev,
-        entry: rounded,
-        stop:
-          prev.stop ??
-          roundTo(rounded * (orderDraft.side === 'buy' ? 0.99 : 1.01), 2),
-        target:
-          prev.target ??
-          roundTo(rounded * (orderDraft.side === 'buy' ? 1.02 : 0.98), 2)
-      }));
-
-      setOrderDraft((prev) => ({
-        ...prev,
-        limitPrice: prev.type === 'market' ? prev.limitPrice : rounded,
-        stopPrice:
-          prev.stopPrice ?? roundTo(rounded * (prev.side === 'buy' ? 0.99 : 1.01), 2),
-        targetPrice:
-          prev.targetPrice ?? roundTo(rounded * (prev.side === 'buy' ? 1.02 : 0.98), 2)
-      }));
-    },
-    [orderDraft.side]
-  );
-
-  const handleChartDoubleClick = useCallback(
-    (price) => {
-      const rounded = roundTo(price, 2);
-      setPendingMarkers((prev) => ({
-        ...prev,
-        entry: rounded
-      }));
-
-      setOrderDraft((prev) => ({
-        ...prev,
-        type: 'limit',
-        limitPrice: rounded,
-        stopPrice: prev.stopPrice ?? roundTo(rounded * (prev.side === 'buy' ? 0.98 : 1.02), 2),
-        targetPrice: prev.targetPrice ?? roundTo(rounded * (prev.side === 'buy' ? 1.02 : 0.98), 2)
-      }));
-    },
-    []
-  );
-
-  const handleMarkerChange = useCallback((marker, price) => {
-    setPendingMarkers((prev) => ({
-      ...prev,
-      [marker]: price
-    }));
-
-    if (marker === 'entry') {
-      setOrderDraft((prev) => ({
-        ...prev,
-        limitPrice: prev.type === 'market' ? prev.limitPrice : price
-      }));
-    }
-    if (marker === 'stop') {
-      setOrderDraft((prev) => ({
-        ...prev,
-        stopPrice: price
-      }));
-    }
-    if (marker === 'target') {
-      setOrderDraft((prev) => ({
-        ...prev,
-        targetPrice: price
-      }));
-    }
-  }, []);
-
-  
 
   const dismissToast = useCallback((id) => {
     setToastQueue((prev) => prev.filter((toast) => toast.id !== id));
@@ -1175,7 +995,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
       stopPrice: stop,
       targetPrice: target
     }));
-    setPendingMarkers({ entry, stop, target });
     ticketRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     pushToast({ title: 'Guided trade ready', message: 'We prefilled a starter ticket — review and run it.' });
   }, [
@@ -1184,8 +1003,7 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
     getSymbolPrice,
     pushToast,
     selectedSymbol,
-    setOrderDraft,
-    setPendingMarkers
+    setOrderDraft
   ]);
 
   const submitOrder = useCallback(
@@ -1326,7 +1144,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
           price: roundedPrice,
           timestamp: actionTimestamp
         });
-        setPendingMarkers({ entry: null, stop: null, target: null });
         setOrderDraft((prev) => ({ ...prev, stopPrice: null, targetPrice: null }));
         setJournalDraft({
           symbol,
@@ -1367,7 +1184,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
       setJournalDraft,
       setLastAction,
       setOrderDraft,
-      setPendingMarkers,
       setPlacing
     ]
   );
@@ -1551,7 +1367,6 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
           onSelectList={setActiveWatchlistId}
           onSelectSymbol={(symbol) => {
             setSelectedSymbol(symbol);
-            setPendingMarkers({ entry: null, stop: null, target: null });
             setWatchQuery('');
           }}
           selectedSymbol={selectedSymbol}
@@ -1709,8 +1524,8 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
                     description: 'Watchlist drives the chart, ticket, and risk panels.'
                   },
                   {
-                    label: 'Mark entry & risk',
-                    description: 'Click the chart to prefill the ticket, then drag ghost stop/target lines.'
+                    label: 'Study the chart',
+                    description: 'Use TradingView tools to mark levels, add indicators, and plan the trade.'
                   },
                   {
                     label: 'Send the paper order',
@@ -1735,35 +1550,15 @@ export default function PaperTradingWorkspace({ session: serverSession = null })
 
             <div className="relative">
               <TradeChart
-                data={chartData}
                 symbol={selectedSymbol}
-                overlays={overlayState}
-                onToggleOverlay={handleOverlayToggle}
-                onChartClick={handleChartClick}
-                onChartDoubleClick={handleChartDoubleClick}
-                onMarkerChange={handleMarkerChange}
-                markers={pendingMarkers}
-                filledOrders={orders.filter(
-                  (order) => order.symbol === selectedSymbol && (order.status ?? '').toLowerCase() === 'filled'
-                )}
-                activeSide={orderDraft.side}
+                assetClass={selectedMeta?.assetClass}
                 reference={chartRef}
                 timeframe={timeframe}
                 timeframeOptions={TIMEFRAME_PRESETS}
                 onTimeframeChange={setTimeframe}
                 marketStatus={marketStatus}
               />
-              {chartLoading ? (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-3xl bg-white/65 text-sm font-medium text-slate-600">
-                  Refreshing market data…
-                </div>
-              ) : null}
             </div>
-            {chartError ? (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {chartError}
-              </div>
-            ) : null}
 
             <OrderTicket
               data={{ positions, symbol: selectedSymbol }}

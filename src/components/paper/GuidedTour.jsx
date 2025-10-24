@@ -24,7 +24,7 @@ export default function GuidedTour({ anchors, onDismiss }) {
         id: 'chart',
         title: 'Interactive chart',
         message:
-          'Click to prefill the ticket, drag ghost stop/target lines, and study overlays with live stats.',
+          'TradingView powers the desk — change intervals, add studies, and draw levels before you fire a paper trade.',
         target: chart
       },
       {
