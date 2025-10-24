@@ -202,6 +202,7 @@ export default function TradeChart({
           if (disposed) {
             return;
           }
+          setError(null);
           setLoading(false);
           setChartReady(true);
         });
