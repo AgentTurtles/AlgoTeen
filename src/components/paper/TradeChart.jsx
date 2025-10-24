@@ -88,7 +88,7 @@ export default function TradeChart({
         };
 
         for (const key of candidateKeys) {
-          if (key === 'ref') continue;
+          if (key === 'ref' || key === 'key') continue;
           try {
             enqueue(value[key]);
           } catch (e) {}
@@ -100,7 +100,7 @@ export default function TradeChart({
             ...Object.getOwnPropertyNames(value)
           ];
           for (const key of ownKeys) {
-            if (candidateKeys.includes(key) || key === 'ref') continue;
+            if (candidateKeys.includes(key) || key === 'ref' || key === 'key') continue;
             enqueue(value[key]);
           }
         } catch (e) {}
