@@ -198,14 +198,25 @@ export default function TradeChart({
         });
 
         widgetRef.current = widget;
-        widget.onChartReady(() => {
+        const markReady = () => {
           if (disposed) {
             return;
           }
           setError(null);
           setLoading(false);
           setChartReady(true);
-        });
+        };
+
+        if (typeof widget.onChartReady === 'function') {
+          widget.onChartReady(markReady);
+        } else if (typeof widget.onReady === 'function') {
+          widget.onReady(markReady);
+        } else {
+          // Fallback for unexpected widget instances lacking readiness hooks
+          requestAnimationFrame(() => {
+            markReady();
+          });
+        }
       })
       .catch((err) => {
         if (disposed) {
