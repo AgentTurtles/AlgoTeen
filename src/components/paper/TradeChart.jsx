@@ -1,7 +1,6 @@
  'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createChart, CrosshairMode } from 'lightweight-charts';
 import { computeSMA } from './utils';
 
 export default function TradeChart({
@@ -37,6 +36,7 @@ export default function TradeChart({
 
     let chartInstance = null;
     let resizeObserver = null;
+    let disposed = false;
 
     const resolveChartApi = (value, options = {}) => {
       const { visited = new Set(), depth = 0, maxDepth = 5 } = options;
@@ -160,94 +160,142 @@ export default function TradeChart({
       container.innerHTML = '';
     } catch (e) {}
 
-    try {
-      const created = createChart(container, {
-        layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
-        rightPriceScale: { visible: true },
-        timeScale: { timeVisible: true, rightOffset: 12 },
-        crosshair: { mode: CrosshairMode.Normal }
-      });
-      chartInstance = resolveChartApi(created) ?? findApiFromDom(container) ?? created;
-    } catch (error) {
-      console.error('TradeChart: error creating chart', error);
-      setDebugInfo({ error: 'createChart', message: error?.message ?? String(error) });
-      setUseFallback(true);
-      cleanup();
-      return cleanup;
-    }
-
-    if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
-      console.error('TradeChart: could not resolve chart API from createChart result');
-      setDebugInfo({ error: 'chartApi', message: 'Failed to resolve chart API' });
-      setUseFallback(true);
-      cleanup();
-      return cleanup;
-    }
-
-    chartRef.current = chartInstance;
-
-    try {
-      candleSeriesRef.current = chartInstance.addCandlestickSeries({
-        upColor: '#0F9D58',
-        borderUpColor: '#0F9D58',
-        wickUpColor: '#0F9D58',
-        downColor: '#DC2626',
-        borderDownColor: '#DC2626',
-        wickDownColor: '#DC2626'
-      });
-    } catch (error) {
-      console.error('TradeChart: failed to create candlestick series', error);
-      setDebugInfo({ error: 'candlestickSeries', message: error?.message ?? String(error) });
-      setUseFallback(true);
-      cleanup();
-      return cleanup;
-    }
-
-    try {
-      volumeSeriesRef.current = chartInstance.addHistogramSeries({
-        scaleMargins: { top: 0.8, bottom: 0 },
-        priceFormat: { type: 'volume' },
-        color: '#8b98c9',
-        priceLineVisible: false
-      });
-    } catch (error) {
-      console.error('TradeChart: failed to create volume series', error);
-      volumeSeriesRef.current = null;
-    }
-
-    try {
-      smaSeriesRef.current = chartInstance.addLineSeries({
-        color: '#1D4ED8',
-        lineWidth: 2
-      });
-    } catch (error) {
-      smaSeriesRef.current = null;
-    }
-
-    try {
-      vwapSeriesRef.current = chartInstance.addLineSeries({
-        color: '#0F766E',
-        lineWidth: 2
-      });
-    } catch (error) {
-      vwapSeriesRef.current = null;
-    }
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-    if (typeof ResizeObserver !== 'undefined') {
+    const initialiseChart = async () => {
+      let module;
       try {
-        resizeObserver = new ResizeObserver(() => handleResize());
-        resizeObserver.observe(container);
-      } catch (e) {
-        resizeObserver = null;
+        module = await import('lightweight-charts');
+      } catch (error) {
+        if (disposed) return;
+        console.error('TradeChart: failed to load lightweight-charts module', error);
+        setDebugInfo({ error: 'moduleImport', message: error?.message ?? String(error) });
+        setUseFallback(true);
+        cleanup();
+        return;
       }
-    }
 
-    setUseFallback(false);
-    setDebugInfo({ initialized: true });
+      if (disposed) return;
 
-    return cleanup;
+      const createChartFn =
+        typeof module?.createChart === 'function'
+          ? module.createChart
+          : typeof module?.default === 'function'
+            ? module.default
+            : typeof module?.default?.createChart === 'function'
+              ? module.default.createChart
+              : null;
+
+      const crosshairModeNormal =
+        module?.CrosshairMode?.Normal ??
+        module?.default?.CrosshairMode?.Normal ??
+        0;
+
+      if (typeof createChartFn !== 'function') {
+        console.error('TradeChart: createChart export is not a function');
+        setDebugInfo({ error: 'createChartExport', message: 'Invalid createChart export' });
+        setUseFallback(true);
+        cleanup();
+        return;
+      }
+
+      try {
+        const created = createChartFn(container, {
+          layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
+          rightPriceScale: { visible: true },
+          timeScale: { timeVisible: true, rightOffset: 12 },
+          crosshair: { mode: crosshairModeNormal }
+        });
+        chartInstance = resolveChartApi(created) ?? findApiFromDom(container) ?? created;
+      } catch (error) {
+        if (disposed) return;
+        console.error('TradeChart: error creating chart', error);
+        setDebugInfo({ error: 'createChart', message: error?.message ?? String(error) });
+        setUseFallback(true);
+        cleanup();
+        return;
+      }
+
+      if (disposed) return;
+
+      if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
+        console.error('TradeChart: could not resolve chart API from createChart result');
+        setDebugInfo({ error: 'chartApi', message: 'Failed to resolve chart API' });
+        setUseFallback(true);
+        cleanup();
+        return;
+      }
+
+      chartRef.current = chartInstance;
+
+      try {
+        candleSeriesRef.current = chartInstance.addCandlestickSeries({
+          upColor: '#0F9D58',
+          borderUpColor: '#0F9D58',
+          wickUpColor: '#0F9D58',
+          downColor: '#DC2626',
+          borderDownColor: '#DC2626',
+          wickDownColor: '#DC2626'
+        });
+      } catch (error) {
+        console.error('TradeChart: failed to create candlestick series', error);
+        setDebugInfo({ error: 'candlestickSeries', message: error?.message ?? String(error) });
+        setUseFallback(true);
+        cleanup();
+        return;
+      }
+
+      try {
+        volumeSeriesRef.current = chartInstance.addHistogramSeries({
+          scaleMargins: { top: 0.8, bottom: 0 },
+          priceFormat: { type: 'volume' },
+          color: '#8b98c9',
+          priceLineVisible: false
+        });
+      } catch (error) {
+        console.error('TradeChart: failed to create volume series', error);
+        volumeSeriesRef.current = null;
+      }
+
+      try {
+        smaSeriesRef.current = chartInstance.addLineSeries({
+          color: '#1D4ED8',
+          lineWidth: 2
+        });
+      } catch (error) {
+        smaSeriesRef.current = null;
+      }
+
+      try {
+        vwapSeriesRef.current = chartInstance.addLineSeries({
+          color: '#0F766E',
+          lineWidth: 2
+        });
+      } catch (error) {
+        vwapSeriesRef.current = null;
+      }
+
+      if (disposed) return;
+
+      window.addEventListener('resize', handleResize);
+      handleResize();
+      if (typeof ResizeObserver !== 'undefined') {
+        try {
+          resizeObserver = new ResizeObserver(() => handleResize());
+          resizeObserver.observe(container);
+        } catch (e) {
+          resizeObserver = null;
+        }
+      }
+
+      setUseFallback(false);
+      setDebugInfo({ initialized: true });
+    };
+
+    initialiseChart();
+
+    return () => {
+      disposed = true;
+      cleanup();
+    };
   }, []);
 
   // small on-page debug area when developer appends ?chartdebug=1 to URL
@@ -257,7 +305,7 @@ export default function TradeChart({
       const params = new URLSearchParams(window.location.search);
       if (!params.has('chartdebug')) return;
       const info = {
-        typeofCreateChart: typeof createChart,
+        typeofCreateChart: 'dynamic-import',
         containerNode: containerRef.current ? containerRef.current.nodeName : null,
         containerChildren: containerRef.current ? containerRef.current.childNodes.length : 0,
         chartRefPresent: !!chartRef.current
