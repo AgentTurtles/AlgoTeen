@@ -38,6 +38,14 @@ export default function TradeChart({
     let resizeObserver = null;
     let disposed = false;
 
+    const reactElementType = typeof Symbol === 'function' ? Symbol.for('react.element') : null;
+
+    const isReactElement = (value) =>
+      !!reactElementType &&
+      value &&
+      typeof value === 'object' &&
+      value.$$typeof === reactElementType;
+
     const resolveChartApi = (value, options = {}) => {
       const { visited = new Set(), depth = 0, maxDepth = 6 } = options;
       if (!value || visited.has(value) || depth > maxDepth) {
@@ -46,6 +54,14 @@ export default function TradeChart({
       visited.add(value);
       if (typeof value.addCandlestickSeries === 'function') {
         return value;
+      }
+
+      if (typeof value !== 'object' && typeof value !== 'function') {
+        return null;
+      }
+
+      if (isReactElement(value)) {
+        return null;
       }
 
       const candidateKeys = [
@@ -62,6 +78,7 @@ export default function TradeChart({
       ];
 
       const inspectKey = (key, getter) => {
+        if (key === 'ref') return null;
         try {
           if (!getter) return null;
           const candidate = getter();
@@ -89,7 +106,7 @@ export default function TradeChart({
       } catch (e) {}
 
       for (const key of keysToInspect) {
-        if (candidateKeys.includes(key)) continue;
+        if (candidateKeys.includes(key) || key === 'ref') continue;
         const resolved = inspectKey(key, () => value[key]);
         if (resolved) return resolved;
       }
@@ -119,7 +136,7 @@ export default function TradeChart({
         } catch (e) {}
 
         try {
-          const props = Object.getOwnPropertyNames(node);
+          const props = Object.getOwnPropertyNames(node).filter((prop) => prop !== 'ref');
           for (const prop of props) {
             if (propCandidates.includes(prop)) continue;
             const val = node[prop];
@@ -223,16 +240,13 @@ export default function TradeChart({
 
       let created;
       try {
-        created = createChartFn(container, {
+        const maybeCreated = createChartFn(container, {
           layout: { backgroundColor: '#ffffff', textColor: '#0f172a' },
           rightPriceScale: { visible: true },
           timeScale: { timeVisible: true, rightOffset: 12 },
           crosshair: { mode: crosshairModeNormal }
         });
-        chartInstance =
-          resolveChartApi(created) ??
-          findApiFromDom(container) ??
-          created;
+        created = await maybeCreated;
       } catch (error) {
         if (disposed) return;
         console.error('TradeChart: error creating chart', error);
@@ -244,13 +258,57 @@ export default function TradeChart({
 
       if (disposed) return;
 
+      const unwrapCandidates = [
+        created,
+        created?.chart,
+        created?.chartApi,
+        created?.api,
+        created?.value,
+        created?.default,
+        created?.instance,
+        created?.current
+      ];
+
+      for (const candidate of unwrapCandidates) {
+        if (candidate && typeof candidate.addCandlestickSeries === 'function') {
+          chartInstance = candidate;
+          break;
+        }
+      }
+
+      if (!chartInstance) {
+        for (const candidate of unwrapCandidates) {
+          const resolved = resolveChartApi(candidate);
+          if (resolved && typeof resolved.addCandlestickSeries === 'function') {
+            chartInstance = resolved;
+            break;
+          }
+        }
+      }
+
+      if (!chartInstance) {
+        chartInstance = findApiFromDom(container);
+      }
+
       if (!chartInstance || typeof chartInstance.addCandlestickSeries !== 'function') {
         await waitForNextFrame();
         if (disposed) return;
-        const deferredResolution =
-          resolveChartApi(created) ??
-          resolveChartApi(chartInstance) ??
-          findApiFromDom(container);
+        const deferredCandidates = [
+          created,
+          chartInstance,
+          ...unwrapCandidates
+        ];
+        let deferredResolution = null;
+        for (const candidate of deferredCandidates) {
+          const resolved = resolveChartApi(candidate);
+          if (resolved && typeof resolved.addCandlestickSeries === 'function') {
+            deferredResolution = resolved;
+            break;
+          }
+        }
+        if (!deferredResolution) {
+          deferredResolution = findApiFromDom(container);
+        }
         if (deferredResolution && typeof deferredResolution.addCandlestickSeries === 'function') {
           chartInstance = deferredResolution;
         }
